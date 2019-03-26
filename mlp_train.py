@@ -64,6 +64,10 @@ class network:
         self.size = len(layers)
         self.train_size = len(data_train)
         self.valid_size = len(data_valid)
+        self.x = data_train.drop(columns='class')
+        self.valid_x = data_valid.drop(columns='class')
+        self.y = data_train['class']
+        self.valid_y = data_valid['class']
         self.thetas = []
         self.deltas = []
         i = 0
@@ -82,6 +86,8 @@ def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, turns=100
         derivate = backward_pro(network)
         while j < network.size - 1:
             network.thetas[j] = network.thetas[j] - learning_rate * derivate[j]
+            j += 1
+        i += 1
     return 1
 
 
@@ -93,11 +99,12 @@ def forward_pro(network, row):
     activ_dict = {
             'sigmoid': sigmoid,
     }
-    a = [row]
+    a = [row.to_numpy().reshape(-1, 1)]
     i = 0
-    while i < network.size:
+    while i < network.size - 1:
+        a[i] = np.insert(a[i], 0, 1.0, axis=0)
         a.append(activ_dict[network.layers[i].activation](
-            a[i] * network.thetas[i]))
+            network.thetas[i].dot(a[i])))
         i += 1
     return a
 
@@ -108,12 +115,16 @@ def backward_pro(network):
     total_delta = network.deltas.copy()
     derivate = [0] * (network.size - 1)
     while i < len(network.x):
-        a = forward_pro(network, network.x[i])
+        a = forward_pro(network, network.x.iloc[i])
         j = network.size - 1
-        delta[j] = a[j] - network.y[i]
+        delta[j] = a[j] - network.y.iloc[i]
         j -= 1
         while j > 0:
-            delta[j] = network.thetas[j] * delta[j + 1] * a[j] * (1 - a[j])
+            describe(j)
+            describe(network.thetas[j].shape)
+            describe(delta[j + 1].shape)
+            describe(a[j].shape)
+            delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
             total_delta[j] += delta[j + 1] * np.transpose(a[j])
             j -= 1
         total_delta[j] += delta[j + 1] * np.transpose(a[j])
@@ -144,12 +155,20 @@ def main():
     pd.set_option('display.expand_frame_repr', False)
     df = get_data(sys.argv)
     pd.set_option('display.max_rows', len(df))
-    df = df.rename(columns={0: "id", 1: "Class"})
+    df = df.rename(columns={0: "id", 1: "class"})
+    df['class'] = df['class'].map({'M': np.array([1, 0]).reshape(2, 1), 'B': np.array([0, 1]).reshape(2, 1)})
     df = df.drop(columns='id')
     df = df.sample(frac=1)
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
-    describe(dfs[0])
-    describe(dfs[1])
+    # describe(dfs[0])
+    # describe(dfs[1])
+    layers = [
+            layer(len(df.columns) - 1),
+            layer(24),
+            layer(24),
+            layer(2)]
+    net = network(layers, dfs[0], dfs[1])
+    gradient_descent(net)
     # describe(forward_pro(2, 3))
     # print(df.describe())
     # print(df)
