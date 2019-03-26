@@ -79,13 +79,15 @@ class network:
             i += 1
 
 
-def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, turns=100):
+def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, turns=10):
     i = 0
-    j = 0
     while i < turns:
         derivate = backward_pro(network)
+        j = 0
         while j < network.size - 1:
+            describe(network.thetas[j])
             network.thetas[j] = network.thetas[j] - learning_rate * derivate[j]
+            describe(network.thetas[j])
             j += 1
         i += 1
     return 1
@@ -120,17 +122,17 @@ def backward_pro(network):
         delta[j] = a[j] - network.y.iloc[i]
         j -= 1
         while j > 0:
-            describe(j)
-            describe(network.thetas[j].shape)
-            describe(delta[j + 1].shape)
-            describe(a[j].shape)
-            delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
-            total_delta[j] += delta[j + 1] * np.transpose(a[j])
+            if j == network.size - 2:
+                delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
+                total_delta[j] += delta[j + 1] * np.transpose(a[j])
+            else:
+                delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1][1:, :]) * a[j] * (1 - a[j])
+                total_delta[j] += delta[j + 1][1:, :] * np.transpose(a[j])
             j -= 1
-        total_delta[j] += delta[j + 1] * np.transpose(a[j])
+        total_delta[j] += delta[j + 1][1:, :] * np.transpose(a[j])
         i += 1
     i = 0
-    while i < network.size:
+    while i < network.size - 1:
         derivate[i] = total_delta[i] / network.train_size
         i += 1
     return derivate
