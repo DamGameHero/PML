@@ -56,9 +56,13 @@ def get_data(args):
 
 
 class layer:
+    seed_id = 2019
+
     def __init__(self, size, activation='sigmoid'):
         self.size = size
         self.activation = activation
+        self.seed = layer.seed_id
+        layer.seed_id += 1
 
 
 class network:
@@ -79,13 +83,15 @@ class network:
         i = 0
         while i < self.size - 1:
             self.thetas.append(theta_init(
-                self.layers[i].size, self.layers[i + 1].size))
+                self.layers[i].size,
+                self.layers[i + 1].size,
+                self.layers[i].seed))
             self.deltas.append(theta_init(
-                self.layers[i].size, self.layers[i + 1].size, 0.0))
+                self.layers[i].size, self.layers[i + 1].size, eps=0.0))
             i += 1
 
 
-def gradient_descent(network, loss='cross_entropy', learning_rate=0.001, turns=200):
+def gradient_descent(network, loss='cross_entropy', learning_rate=0.01, turns=200):
     costs = []
     valid_costs = []
     # new_cost = cost(theta, x, y_class)[0]
@@ -105,7 +111,8 @@ def gradient_descent(network, loss='cross_entropy', learning_rate=0.001, turns=2
         network.predict.clear()
         network.valid_predict.clear()
         i += 1
-    describe(network.thetas)
+    print("train cost = ", new_cost)
+    print("valid cost = ", new_valid_cost)
     plt.xlabel('No. of iterations')
     plt.ylabel('Cost Function')
     plt.title("Cost Function Evolution")
@@ -119,8 +126,8 @@ def gradient_descent(network, loss='cross_entropy', learning_rate=0.001, turns=2
     return 1
 
 
-def theta_init(layer_1, layer_2, eps=0.5):
-    np.random.seed(2019)
+def theta_init(layer_1, layer_2, seed=0, eps=0.5):
+    np.random.seed(seed)
     return np.random.rand(layer_2, layer_1 + 1) * 2 * eps - eps
 
 
@@ -203,8 +210,8 @@ def cross_entropy(predict, y_class):
 
 
 def get_stats(df):
-    df = df.select_dtypes(include='number')
-    df = df[(np.abs(astats.zscore(df)) < 3).all(axis=1)]
+    #df = df.select_dtypes(include='number')
+    #df = df[(np.abs(astats.zscore(df)) < 3).all(axis=1)]
     stats = {
             column: escribe(sub_dict)
             for column, sub_dict in df.select_dtypes(include='number').to_dict().items()}
@@ -276,31 +283,22 @@ def main():
     pd.set_option('display.expand_frame_repr', False)
     pd.set_option('display.max_rows', len(df))
     df = df.rename(columns={0: "id", 1: "class"})
-    df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22])
+    df = df.drop(columns=['id'])
+    #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22])
+    #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22, 26, 21, 19, 15, 10, 6])
     stats = get_stats(df)
     df = feature_scaling(df, stats)
     df['class'] = df['class'].map({'M': 1, 'B': 0})
     df['vec_class'] = df['class'].map({1: np.array([1, 0]).reshape(2, 1), 0: np.array([0, 1]).reshape(2, 1)})
     #df = df.sample(frac=1)
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
-    # describe(dfs[0])
-    # describe(dfs[1])
     layers = [
             layer(len(df.columns) - 2),
-            layer(len(df.columns) - 2),
-            layer(len(df.columns) - 2),
-            layer(len(df.columns) - 2),
-            layer(len(df.columns) - 2),
-            layer(len(df.columns) - 2),
-            layer(len(df.columns) - 2),
-            layer(len(df.columns) - 2),
-            layer(len(df.columns) - 2),
+            layer(24),
+            layer(24),
             layer(2)]
     net = network(layers, dfs[0], dfs[1])
     gradient_descent(net)
-    # describe(forward_pro(2, 3))
-    # print(df.describe())
-    # print(df)
 
 
 if __name__ == '__main__':
