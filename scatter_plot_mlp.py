@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 
 
 def get_data(args):
-    file = "resources/dataset_train.csv"
+    file = "data.csv"
     if len(args) < 2:
-        print("No arguments given. Try with \"resources/dataset_train.csv\".")
+        print("No arguments given. Try with \"data.csv\".")
     else:
         file = args[1]
     try:
-        data = pd.read_csv(file)
+        data = pd.read_csv(file, header=None)
     except Exception as e:
         print("Can't extract data from {}.".format(file))
         print(e.__doc__)
@@ -21,28 +21,11 @@ def get_data(args):
 
 
 def var_init(df):
-    houses = df['Hogwarts House'].values
+    houses = df[1].values
     colors = {
-                'Gryffindor': 'Red',
-                'Hufflepuff': 'Yellow',
-                'Ravenclaw': 'DarkBlue',
-                'Slytherin': 'Green'}
+                'M': 'Red',
+                'B': 'Green'}
     return houses, colors
-
-
-def manual_selection(df, houses, colors):
-    scatter_x = df['Arithmancy'].values
-    scatter_y = df['Care of Magical Creatures'].values
-    fig, ax = plt.subplots()
-    for house in np.unique(houses):
-        ix = np.where(houses == house)
-        ax.scatter(
-                    scatter_x[ix], scatter_y[ix],
-                    c=colors[house], label=house, alpha=0.5)
-    plt.xlabel('Arithmancy')
-    plt.ylabel('Care of Magical Creatures')
-    plt.title('Similar Features')
-    ax.legend()
 
 
 def pearson_correlation(df):
@@ -76,13 +59,15 @@ def plot_scatter(df, feat_cor, houses, colors, sign):
 
 def auto_selection(df, houses, colors):
     subjects = list(df.select_dtypes('number').to_dict().keys())
-    subjects.remove('Index')
+    subjects.remove(0)
     subjects2 = subjects.copy()
     cor = {}
     for sub in subjects:
         subjects2.pop(0)
         for sub2 in subjects2:
             cor[sub, sub2] = pearson_correlation(df[[sub, sub2]].dropna())
+    sorted_cor = sorted(cor.items(), key=operator.itemgetter(1))
+    print(sorted_cor)
     feat_cor_max = max(cor.items(), key=operator.itemgetter(1))[0]
     feat_cor_min = min(cor.items(), key=operator.itemgetter(1))[0]
     val_cor_max = max(cor.items(), key=operator.itemgetter(1))[1]
@@ -96,7 +81,6 @@ def auto_selection(df, houses, colors):
 def main():
     df = get_data(sys.argv)
     houses, colors = var_init(df)
-    manual_selection(df, houses, colors)
     auto_selection(df, houses, colors)
     plt.show()
 

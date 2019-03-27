@@ -23,8 +23,8 @@ def main():
     df = get_data(sys.argv)
     sns.set(font_scale=0.5)
     sns.pairplot(
-                    df.drop(columns='id').dropna(),
-                    hue='Class',
+                    df.drop(columns=[0, 4, 5, 24, 25]).dropna(),
+                    hue=1,
                     height=2,
                     aspect=1)
     plt.subplots_adjust(left=0.04, bottom=0.04)
