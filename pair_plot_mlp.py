@@ -23,7 +23,7 @@ def main():
     df = get_data(sys.argv)
     sns.set(font_scale=0.5)
     sns.pairplot(
-                    df.drop(columns=[0, 4, 5, 24, 25]).dropna(),
+                    df.drop(columns=[0, 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22]).dropna(),
                     hue=1,
                     height=2,
                     aspect=1)

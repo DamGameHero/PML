@@ -6,6 +6,7 @@ import re
 import math
 import matplotlib.pyplot as plt
 from scipy import stats as astats
+import copy
 
 
 def describe(arg):
@@ -71,11 +72,12 @@ class network:
         self.size = len(layers)
         self.train_size = len(data_train)
         self.valid_size = len(data_valid)
-        self.x = data_train.drop(columns=['class', 'vec_class'])
-        self.valid_x = data_valid.drop(columns=['class', 'vec_class'])
-        self.y = data_train['class']
-        self.vec_y = data_train['vec_class']
-        self.valid_y = data_valid['class']
+        self.x = data_train.drop(columns=['class', 'vec_class']).to_numpy()
+        self.valid_x = data_valid.drop(columns=['class', 'vec_class']).to_numpy()
+        self.y = data_train['class'].to_numpy()
+        self.vec_y = np.asarray(data_train['vec_class'].tolist())
+        self.valid_y = data_valid['class'].to_numpy()
+        self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
         self.thetas = []
         self.deltas = []
         self.predict = []
@@ -91,7 +93,7 @@ class network:
             i += 1
 
 
-def gradient_descent(network, loss='cross_entropy', learning_rate=0.01, turns=200):
+def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, turns=80):
     costs = []
     valid_costs = []
     # new_cost = cost(theta, x, y_class)[0]
@@ -103,9 +105,9 @@ def gradient_descent(network, loss='cross_entropy', learning_rate=0.01, turns=20
         while j < network.size - 1:
             network.thetas[j] = network.thetas[j] - learning_rate * derivate[j]
             j += 1
-        new_cost = cross_entropy(np.asarray(network.predict), network.y)
+        new_cost = cross_entropy(np.asarray(network.predict), network.vec_y)
         new_valid_cost = cross_entropy(
-                np.asarray(network.valid_predict), network.valid_y)
+                np.asarray(network.valid_predict), network.valid_vec_y)
         costs.append(new_cost)
         valid_costs.append(new_valid_cost)
         network.predict.clear()
@@ -135,17 +137,25 @@ def forward_pro(network, row, predict=True):
     activ_dict = {
             'sigmoid': sigmoid,
     }
-    a = [row.to_numpy().reshape(-1, 1)]
+    a = [row.reshape(-1, 1)]
+    #a = [row.to_numpy().reshape(-1, 1)]
+    # if predict:
+    #    describe(row)
     i = 0
     while i < network.size - 1:
+        # if predict:
+        #     describe(i)
+        #     describe(a[i])
         a[i] = np.insert(a[i], 0, 1.0, axis=0)
         a.append(activ_dict[network.layers[i].activation](
             network.thetas[i].dot(a[i])))
         i += 1
     if predict:
-        network.predict.append(a[i][0])
+        network.predict.append(a[i])
+        #network.predict.append(a[i][0])
     else:
-        network.valid_predict.append(a[i][0])
+        network.valid_predict.append(a[i])
+        #network.valid_predict.append(a[i][0])
 
     return a
 
@@ -153,18 +163,21 @@ def forward_pro(network, row, predict=True):
 def backward_pro(network):
     i = 0
     delta = [0] * (network.size)
-    total_delta = network.deltas.copy()
+    total_delta = copy.deepcopy(network.deltas)
     derivate = [0] * (network.size - 1)
     while i < len(network.x):
         if i < len(network.valid_x):
-            forward_pro(network, network.valid_x.iloc[i], predict=False)
-        a = forward_pro(network, network.x.iloc[i])
+            #forward_pro(network, network.valid_x.iloc[i], predict=False)
+            forward_pro(network, network.valid_x[i], predict=False)
+        a = forward_pro(network, network.x[i])
         j = network.size - 1
-        delta[j] = a[j] - network.vec_y.iloc[i]
+        delta[j] = a[j] - network.vec_y[i].reshape(-1, 1)
+        #delta[j] = a[j] - network.y.iloc[i]
         j -= 1
         while j > 0:
             if j == network.size - 2: # can del the 1st line of delta after and del if else
                 delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
+                #delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
                 total_delta[j] += delta[j + 1] * np.transpose(a[j])
             else:
                 delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1][1:, :]) * a[j] * (1 - a[j])
@@ -194,9 +207,13 @@ def softmax(h):
 
 def cross_entropy(predict, y_class):
     size = np.size(predict, 0)
+    predict = predict.reshape(-1, 2)
+    # y_0 = (-1 * y_class[:, 0].T.dot((np.log(predict[:, 0]))) - (1 - y_class[:, 0]).T.dot((np.log(1 - predict[:, 0]))))
+    # y_1 = (-1 * y_class[:, 1].T.dot((np.log(predict[:, 1]))) - (1 - y_class[:, 1]).T.dot((np.log(1 - predict[:, 1]))))
+    # return (1 / size) * (y_0 + y_1)
     return ((1 / size)
-            * (-1 * y_class.dot((np.log(predict)))
-            - (1 - y_class).dot((np.log(1 - predict)))))
+            * (-1 * y_class[:, 0].dot((np.log(predict[:, 0])))
+                - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0])))))
 
 
 # def get_stats(data):
@@ -210,8 +227,8 @@ def cross_entropy(predict, y_class):
 
 
 def get_stats(df):
-    #df = df.select_dtypes(include='number')
-    #df = df[(np.abs(astats.zscore(df)) < 3).all(axis=1)]
+    #df = df.select_dtypes(include='number') # a faire
+    #df = df[(np.abs(astats.zscore(df)) < 3).all(axis=1)] # a faire
     stats = {
             column: escribe(sub_dict)
             for column, sub_dict in df.select_dtypes(include='number').to_dict().items()}
@@ -235,30 +252,30 @@ def escribe(data):
             / (count - 1)
             * np.sum(np.power(values - stats['mean'], 2)))
     stats['std'] = np.sqrt(stats['var'])
-    stats['min'] = values[0]
-    stats['max'] = values[count - 1]
-    stats['range'] = stats['max'] - stats['min']
-    stats['25%'] = percentile(0.25, count, values)
-    stats['75%'] = percentile(0.75, count, values)
-    if count % 2 == 0:
-        stats['50%'] = (values[int(count / 2 - 1)]
-                        + values[int(count / 2)]) / 2
-    else:
-        stats['50%'] = values[int((count + 1) / 2 - 1)]
-    stats['Q3-Q1 range'] = stats['75%'] - stats['25%']
-    stats['mad'] = np.sum(np.absolute(values - stats['mean'])) / count
-    stats['10%'] = percentile(0.1, count, values)
-    stats['20%'] = percentile(0.2, count, values)
-    stats['30%'] = percentile(0.3, count, values)
-    stats['40%'] = percentile(0.4, count, values)
-    stats['60%'] = percentile(0.6, count, values)
-    stats['70%'] = percentile(0.7, count, values)
-    stats['80%'] = percentile(0.8, count, values)
-    stats['90%'] = percentile(0.9, count, values)
-    svalues = [
-            item for item in clean_data.values()
-            if item >= stats['10%'] and item <= stats['90%']]
-    stats['clmean'] = sum(svalues) / len(svalues)
+    # stats['min'] = values[0]
+    # stats['max'] = values[count - 1]
+    # stats['range'] = stats['max'] - stats['min']
+    # stats['25%'] = percentile(0.25, count, values)
+    # stats['75%'] = percentile(0.75, count, values)
+    # if count % 2 == 0:
+    #     stats['50%'] = (values[int(count / 2 - 1)]
+    #                     + values[int(count / 2)]) / 2
+    # else:
+    #     stats['50%'] = values[int((count + 1) / 2 - 1)]
+    # stats['Q3-Q1 range'] = stats['75%'] - stats['25%']
+    # stats['mad'] = np.sum(np.absolute(values - stats['mean'])) / count
+    # stats['10%'] = percentile(0.1, count, values)
+    # stats['20%'] = percentile(0.2, count, values)
+    # stats['30%'] = percentile(0.3, count, values)
+    # stats['40%'] = percentile(0.4, count, values)
+    # stats['60%'] = percentile(0.6, count, values)
+    # stats['70%'] = percentile(0.7, count, values)
+    # stats['80%'] = percentile(0.8, count, values)
+    # stats['90%'] = percentile(0.9, count, values)
+    # svalues = [
+    #         item for item in clean_data.values()
+    #         if item >= stats['10%'] and item <= stats['90%']]
+    # stats['clmean'] = sum(svalues) / len(svalues)
     return stats
 
 
@@ -284,12 +301,14 @@ def main():
     pd.set_option('display.max_rows', len(df))
     df = df.rename(columns={0: "id", 1: "class"})
     df = df.drop(columns=['id'])
+    #df = df.drop(columns=['id', 20, 13, 11, 16])
     #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22])
     #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22, 26, 21, 19, 15, 10, 6])
     stats = get_stats(df)
     df = feature_scaling(df, stats)
     df['class'] = df['class'].map({'M': 1, 'B': 0})
-    df['vec_class'] = df['class'].map({1: np.array([1, 0]).reshape(2, 1), 0: np.array([0, 1]).reshape(2, 1)})
+    df['vec_class'] = df['class'].map({1: [1, 0], 0: [0, 1]})
+    #df['vec_class'] = df['class'].map({1: np.array([1, 0]).reshape(2, 1), 0: np.array([0, 1]).reshape(2, 1)})
     #df = df.sample(frac=1)
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
     layers = [
@@ -297,6 +316,7 @@ def main():
             layer(24),
             layer(24),
             layer(2)]
+            #layer(1)]
     net = network(layers, dfs[0], dfs[1])
     gradient_descent(net)
 
