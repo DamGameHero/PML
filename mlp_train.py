@@ -7,6 +7,7 @@ import math
 import matplotlib.pyplot as plt
 from scipy import stats as astats
 import copy
+import timeit
 
 
 def describe(arg):
@@ -96,9 +97,8 @@ class network:
 def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, turns=80):
     costs = []
     valid_costs = []
-    # new_cost = cost(theta, x, y_class)[0]
-    # costs.append(new_cost)
     i = 0
+    start = timeit.default_timer()
     while i < turns:
         derivate = backward_pro(network)
         j = 0
@@ -113,18 +113,20 @@ def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, turns=80)
         network.predict.clear()
         network.valid_predict.clear()
         i += 1
+    stop = timeit.default_timer()
+    print('Time Gradient: ', stop - start)
     print("train cost = ", new_cost)
     print("valid cost = ", new_valid_cost)
-    plt.xlabel('No. of iterations')
-    plt.ylabel('Cost Function')
-    plt.title("Cost Function Evolution")
-    plt.plot(
-            np.arange(turns),
-            costs)
-    plt.plot(
-            np.arange(turns),
-            valid_costs)
-    plt.show()
+    # plt.xlabel('No. of iterations')
+    # plt.ylabel('Cost Function')
+    # plt.title("Cost Function Evolution")
+    # plt.plot(
+    #         np.arange(turns),
+    #         costs)
+    # plt.plot(
+    #         np.arange(turns),
+    #         valid_costs)
+    # plt.show()
     return 1
 
 
@@ -133,7 +135,7 @@ def theta_init(layer_1, layer_2, seed=0, eps=0.5):
     return np.random.rand(layer_2, layer_1 + 1) * 2 * eps - eps
 
 
-def forward_pro(network, row, predict=True):
+def forward_pro(network, row, train=True):
     activ_dict = {
             'sigmoid': sigmoid,
     }
@@ -144,11 +146,10 @@ def forward_pro(network, row, predict=True):
         a.append(activ_dict[network.layers[i].activation](
             network.thetas[i].dot(a[i])))
         i += 1
-    if predict:
+    if train:
         network.predict.append(a[i])
     else:
         network.valid_predict.append(a[i])
-
     return a
 
 
@@ -159,7 +160,7 @@ def backward_pro(network):
     derivate = [0] * (network.size - 1)
     while i < len(network.x):
         if i < len(network.valid_x):
-            forward_pro(network, network.valid_x[i], predict=False)
+            forward_pro(network, network.valid_x[i], train=False)
         a = forward_pro(network, network.x[i])
         j = network.size - 1
         delta[j] = a[j] - network.vec_y[i].reshape(-1, 1)
@@ -272,6 +273,7 @@ def feature_scaling(df, stats):
 
 
 def main():
+    start = timeit.default_timer()
     df = get_data(sys.argv)
     pd.set_option('display.expand_frame_repr', False)
     pd.set_option('display.max_rows', len(df))
@@ -293,6 +295,8 @@ def main():
             layer(2)]
     net = network(layers, dfs[0], dfs[1])
     gradient_descent(net)
+    stop = timeit.default_timer()
+    print('Time Global: ', stop - start)
 
 
 if __name__ == '__main__':
