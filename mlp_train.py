@@ -139,10 +139,11 @@ def forward_pro(network, row, train=True):
     activ_dict = {
             'sigmoid': sigmoid,
     }
-    a = [row.reshape(-1, 1)]
     i = 0
+    a = [row.reshape(-1, 1)]
+    b = np.array([[1.0]]).reshape(1, 1)
     while i < network.size - 1:
-        a[i] = np.insert(a[i], 0, 1.0, axis=0)
+        a[i] = np.concatenate((b, a[i]), axis=0)
         a.append(activ_dict[network.layers[i].activation](
             network.thetas[i].dot(a[i])))
         i += 1
@@ -166,11 +167,11 @@ def backward_pro(network):
         delta[j] = a[j] - network.vec_y[i].reshape(-1, 1)
         j -= 1
         while j > 0:
-            delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
-            total_delta[j] += delta[j + 1] * np.transpose(a[j])
+            delta[j] = network.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
+            total_delta[j] += delta[j + 1] * a[j].T
             delta[j] = delta[j][1:, :]
             j -= 1
-        total_delta[j] += delta[j + 1] * np.transpose(a[j])
+        total_delta[j] += delta[j + 1] * a[j].T
         i += 1
     i = 0
     while i < network.size - 1:
