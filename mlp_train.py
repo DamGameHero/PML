@@ -138,24 +138,16 @@ def forward_pro(network, row, predict=True):
             'sigmoid': sigmoid,
     }
     a = [row.reshape(-1, 1)]
-    #a = [row.to_numpy().reshape(-1, 1)]
-    # if predict:
-    #    describe(row)
     i = 0
     while i < network.size - 1:
-        # if predict:
-        #     describe(i)
-        #     describe(a[i])
         a[i] = np.insert(a[i], 0, 1.0, axis=0)
         a.append(activ_dict[network.layers[i].activation](
             network.thetas[i].dot(a[i])))
         i += 1
     if predict:
         network.predict.append(a[i])
-        #network.predict.append(a[i][0])
     else:
         network.valid_predict.append(a[i])
-        #network.valid_predict.append(a[i][0])
 
     return a
 
@@ -167,23 +159,17 @@ def backward_pro(network):
     derivate = [0] * (network.size - 1)
     while i < len(network.x):
         if i < len(network.valid_x):
-            #forward_pro(network, network.valid_x.iloc[i], predict=False)
             forward_pro(network, network.valid_x[i], predict=False)
         a = forward_pro(network, network.x[i])
         j = network.size - 1
         delta[j] = a[j] - network.vec_y[i].reshape(-1, 1)
-        #delta[j] = a[j] - network.y.iloc[i]
         j -= 1
         while j > 0:
-            if j == network.size - 2: # can del the 1st line of delta after and del if else
-                delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
-                #delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
-                total_delta[j] += delta[j + 1] * np.transpose(a[j])
-            else:
-                delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1][1:, :]) * a[j] * (1 - a[j])
-                total_delta[j] += delta[j + 1][1:, :] * np.transpose(a[j])
+            delta[j] = np.transpose(network.thetas[j]).dot(delta[j + 1]) * a[j] * (1 - a[j])
+            total_delta[j] += delta[j + 1] * np.transpose(a[j])
+            delta[j] = delta[j][1:, :]
             j -= 1
-        total_delta[j] += delta[j + 1][1:, :] * np.transpose(a[j])
+        total_delta[j] += delta[j + 1] * np.transpose(a[j])
         i += 1
     i = 0
     while i < network.size - 1:
@@ -216,19 +202,9 @@ def cross_entropy(predict, y_class):
                 - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0])))))
 
 
-# def get_stats(data):
-#     values = np.sort(np.array(list(data.values()), dtype=object))
-#     count = len(data)
-#     stats = {'mean': sum(data.values()) / count}
-#     stats['var'] = (
-#             1 / (count - 1) * np.sum(np.power(values - stats['mean'], 2)))
-#     stats['std'] = np.sqrt(stats['var'])
-#     return stats
-
-
 def get_stats(df):
-    #df = df.select_dtypes(include='number') # a faire
-    #df = df[(np.abs(astats.zscore(df)) < 3).all(axis=1)] # a faire
+    # df = df.select_dtypes(include='number') # a faire
+    # df = df[(np.abs(astats.zscore(df)) < 3).all(axis=1)] # a faire
     stats = {
             column: escribe(sub_dict)
             for column, sub_dict in df.select_dtypes(include='number').to_dict().items()}
@@ -308,7 +284,6 @@ def main():
     df = feature_scaling(df, stats)
     df['class'] = df['class'].map({'M': 1, 'B': 0})
     df['vec_class'] = df['class'].map({1: [1, 0], 0: [0, 1]})
-    #df['vec_class'] = df['class'].map({1: np.array([1, 0]).reshape(2, 1), 0: np.array([0, 1]).reshape(2, 1)})
     #df = df.sample(frac=1)
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
     layers = [
@@ -316,7 +291,6 @@ def main():
             layer(24),
             layer(24),
             layer(2)]
-            #layer(1)]
     net = network(layers, dfs[0], dfs[1])
     gradient_descent(net)
 
