@@ -43,13 +43,35 @@ def describe(arg):
         del callerframeinfo
 
 
+def check_fpositive(value):
+    fvalue = float(value)
+    if fvalue <= 0:
+        raise argparse.ArgumentTypeError("%s is an invalid positive value" % value)
+    return fvalue
+
+
+def check_ipositive(value):
+    ivalue = int(value)
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError("%s is an invalid positive value" % value)
+    return ivalue
+
+
+def check_fpositive_null(value):
+    fvalue = float(value)
+    if fvalue < 0:
+        raise argparse.ArgumentTypeError("%s is an invalid positive or null value" % value)
+    return fvalue
+
+
 def get_data():
     parser = argparse.ArgumentParser()
     parser.add_argument("data", help="a dataset", nargs='?', default="data.csv")
-    parser.add_argument("-L", "--layers", help="Number of layers", default=2)
-    parser.add_argument("-U", "--units", help="Number of units per layer", default=12)
-    parser.add_argument("-l", "--learning_rate", help="Learning Rate's value", default=1)
-    parser.add_argument("-i", "--iterations", help="Number of iterations", default=80)
+    parser.add_argument("-L", "--layers", help="Number of layers", type=check_ipositive, default=2)
+    parser.add_argument("-U", "--units", help="Number of units per layer", type=check_ipositive, default=12)
+    parser.add_argument("-lr", "--learning_rate", help="Learning Rate's value", type=check_fpositive, default=1.0)
+    parser.add_argument("-i", "--iterations", help="Number of iterations", type=check_ipositive, default=80)
+    parser.add_argument("-la", "--lmbd", help="Lambda's value for regularization", type=check_fpositive_null, default=0.0)
     args = parser.parse_args()
     try:
         data = pd.read_csv(args.data, header=None)
@@ -71,7 +93,7 @@ class layer:
 
 
 class network:
-    def __init__(self, layers, data_train, data_valid):
+    def __init__(self, layers, data_train, data_valid, args):
         self.layers = layers
         self.size = len(layers)
         self.train_size = len(data_train)
@@ -82,6 +104,7 @@ class network:
         self.vec_y = np.asarray(data_train['vec_class'].tolist())
         self.valid_y = data_valid['class'].to_numpy()
         self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
+        self.lmbd = args.lmbd
         self.thetas = []
         self.deltas = []
         self.predict = []
@@ -97,20 +120,20 @@ class network:
             i += 1
 
 
-def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, turns=80):
+def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, iterations=80):
     costs = []
     valid_costs = []
     i = 0
     start = timeit.default_timer()
-    while i < turns:
+    while i < iterations:
         derivate = backward_pro(network)
         j = 0
         while j < network.size - 1:
             network.thetas[j] = network.thetas[j] - learning_rate * derivate[j]
             j += 1
-        new_cost = cross_entropy(np.asarray(network.predict), network.vec_y)
+        new_cost = cross_entropy(np.asarray(network.predict), network.vec_y, network)
         new_valid_cost = cross_entropy(
-                np.asarray(network.valid_predict), network.valid_vec_y)
+                np.asarray(network.valid_predict), network.valid_vec_y, network)
         costs.append(new_cost)
         valid_costs.append(new_valid_cost)
         network.predict.clear()
@@ -124,10 +147,10 @@ def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, turns=80)
     # plt.ylabel('Cost Function')
     # plt.title("Cost Function Evolution")
     # plt.plot(
-    #         np.arange(turns),
+    #         np.arange(iterations),
     #         costs)
     # plt.plot(
-    #         np.arange(turns),
+    #         np.arange(iterations),
     #         valid_costs)
     # plt.show()
     return 1
@@ -178,10 +201,12 @@ def backward_pro(network):
         i += 1
     i = 0
     while i < network.size - 1:
-        # derivate[i] = (total_delta[i] + 3 * network.thetas[i])
-        # derivate[i][:, 0] -= (total_delta[i][:, 0] + 3 * network.thetas[i][:, 0])
-        # derivate[i] /= network.train_size
-        derivate[i] = total_delta[i] / network.train_size
+        if not network.lmbd:
+            derivate[i] = total_delta[i] / network.train_size
+        else:
+            derivate[i] = (total_delta[i] + network.lmbd * network.thetas[i])
+            derivate[i][:, 0] -= (total_delta[i][:, 0] + network.lmbd * network.thetas[i][:, 0])
+            derivate[i] /= network.train_size
         i += 1
     return derivate
 
@@ -199,15 +224,23 @@ def softmax(h):
     return results
 
 
-def cross_entropy(predict, y_class):
+def cross_entropy(predict, y_class, network):
     size = np.size(predict, 0)
     predict = predict.reshape(-1, 2)
+    regularization = 0
+    if network.lmbd:
+        i = 0
+        thetas_sum = 0
+        while i < network.size - 1:
+            thetas_sum += np.sum(network.thetas[i] ** 2)
+            i += 1
+        regularization = network.lmbd / (2 * size) * thetas_sum
     # y_0 = (-1 * y_class[:, 0].T.dot((np.log(predict[:, 0]))) - (1 - y_class[:, 0]).T.dot((np.log(1 - predict[:, 0]))))
     # y_1 = (-1 * y_class[:, 1].T.dot((np.log(predict[:, 1]))) - (1 - y_class[:, 1]).T.dot((np.log(1 - predict[:, 1]))))
-    # return (1 / size) * (y_0 + y_1)
+    # return (1 / size) * (y_0 + y_1) + regularization
     return ((1 / size)
             * (-1 * y_class[:, 0].dot((np.log(predict[:, 0])))
-                - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0])))))
+                - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0]))))) + regularization
 
 
 def get_stats(df):
@@ -306,8 +339,8 @@ def main():
     #df = df.sample(frac=1)
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
     layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
-    net = network(layers, dfs[0], dfs[1])
-    gradient_descent(net)
+    net = network(layers, dfs[0], dfs[1], args)
+    gradient_descent(net, learning_rate=args.learning_rate, iterations=args.iterations)
     stop = timeit.default_timer()
     print('Time Global: ', stop - start)
 
