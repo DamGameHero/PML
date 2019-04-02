@@ -50,6 +50,13 @@ def check_fpositive(value):
     return fvalue
 
 
+def check_fpositive_null(value):
+    fvalue = float(value)
+    if fvalue < 0:
+        raise argparse.ArgumentTypeError("%s is an invalid positive or null value" % value)
+    return fvalue
+
+
 def check_ipositive(value):
     ivalue = int(value)
     if ivalue <= 0:
@@ -57,11 +64,11 @@ def check_ipositive(value):
     return ivalue
 
 
-def check_fpositive_null(value):
-    fvalue = float(value)
-    if fvalue < 0:
+def check_ipositive_null(value):
+    ivalue = int(value)
+    if ivalue < 0:
         raise argparse.ArgumentTypeError("%s is an invalid positive or null value" % value)
-    return fvalue
+    return ivalue
 
 
 def get_data():
@@ -72,6 +79,7 @@ def get_data():
     parser.add_argument("-lr", "--learning_rate", help="Learning Rate's value", type=check_fpositive, default=1.0)
     parser.add_argument("-i", "--iterations", help="Number of iterations", type=check_ipositive, default=80)
     parser.add_argument("-la", "--lmbd", help="Lambda's value for regularization", type=check_fpositive_null, default=0.0)
+    parser.add_argument("-o", "--outliers", help="Drop outliers with the z score given", type=check_ipositive_null, default=0)
     args = parser.parse_args()
     try:
         data = pd.read_csv(args.data, header=None)
@@ -204,7 +212,7 @@ def backward_pro(network):
         if not network.lmbd:
             derivate[i] = total_delta[i] / network.train_size
         else:
-            derivate[i] = (total_delta[i] + network.lmbd * network.thetas[i])
+            derivate[i] = (total_delta[i] + network.lmbd * network.thetas[i]) # can add to the lasts column direct ? init derivate as np array ?
             derivate[i][:, 0] -= (total_delta[i][:, 0] + network.lmbd * network.thetas[i][:, 0])
             derivate[i] /= network.train_size
         i += 1
@@ -227,6 +235,7 @@ def softmax(h):
 def cross_entropy(predict, y_class, network):
     size = np.size(predict, 0)
     predict = predict.reshape(-1, 2)
+    # to do : add counter of class for modularity
     regularization = 0
     if network.lmbd:
         i = 0
@@ -234,7 +243,7 @@ def cross_entropy(predict, y_class, network):
         while i < network.size - 1:
             thetas_sum += np.sum(network.thetas[i] ** 2)
             i += 1
-        regularization = network.lmbd / (2 * size) * thetas_sum
+        regularization = network.lmbd / (2 * size) * thetas_sum # can be calc once with attribute in network (else : train + valid)
     # y_0 = (-1 * y_class[:, 0].T.dot((np.log(predict[:, 0]))) - (1 - y_class[:, 0]).T.dot((np.log(1 - predict[:, 0]))))
     # y_1 = (-1 * y_class[:, 1].T.dot((np.log(predict[:, 1]))) - (1 - y_class[:, 1]).T.dot((np.log(1 - predict[:, 1]))))
     # return (1 / size) * (y_0 + y_1) + regularization
@@ -243,13 +252,16 @@ def cross_entropy(predict, y_class, network):
                 - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0]))))) + regularization
 
 
-def get_stats(df):
-    # df = df.select_dtypes(include='number') # a faire
-    # df = df[(np.abs(astats.zscore(df)) < 3).all(axis=1)] # a faire
+def get_stats(df, drop_outliers):
     stats = {
             column: escribe(sub_dict)
             for column, sub_dict in df.select_dtypes(include='number').to_dict().items()}
-    return stats
+    if drop_outliers:
+        df_tmp = df.copy()
+        df_tmp = feature_scaling(df_tmp, stats)
+        df = df[(np.abs((df_tmp.select_dtypes(include='number'))) < drop_outliers).all(axis=1)] # a faire
+        return get_stats(df, 0)
+    return stats, df
 
 
 def percentile(percent, count, values):
@@ -332,7 +344,7 @@ def main():
     # df = df.drop(columns=['id', 20, 13, 11, 16])
     # df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22])
     #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22, 26, 21, 19, 15, 10, 6])
-    stats = get_stats(df)
+    stats, df = get_stats(df, args.outliers)
     df = feature_scaling(df, stats)
     df['class'] = df['class'].map({'M': 1, 'B': 0})
     df['vec_class'] = df['class'].map({1: [1, 0], 0: [0, 1]})
