@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from scipy import stats as astats
 import copy
 import timeit
+import argparse
 
 
 def describe(arg):
@@ -42,19 +43,21 @@ def describe(arg):
         del callerframeinfo
 
 
-def get_data(args):
-    path = "data.csv"
-    if len(args) < 2:
-        print("No arguments given. Try with \"data.csv\".")
-    else:
-        path = args[1]
+def get_data():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("data", help="a dataset", nargs='?', default="data.csv")
+    parser.add_argument("-L", "--layers", help="Number of layers", default=2)
+    parser.add_argument("-U", "--units", help="Number of units per layer", default=12)
+    parser.add_argument("-l", "--learning_rate", help="Learning Rate's value", default=1)
+    parser.add_argument("-i", "--iterations", help="Number of iterations", default=80)
+    args = parser.parse_args()
     try:
-        data = pd.read_csv(path, header=None)
+        data = pd.read_csv(args.data, header=None)
     except Exception as e:
-        print("Can't extract data from {}.".format(path))
+        print("Can't extract data from {}.".format(args.data))
         print(e.__doc__)
         sys.exit(0)
-    return data
+    return data, args
 
 
 class layer:
@@ -175,6 +178,9 @@ def backward_pro(network):
         i += 1
     i = 0
     while i < network.size - 1:
+        # derivate[i] = (total_delta[i] + 3 * network.thetas[i])
+        # derivate[i][:, 0] -= (total_delta[i][:, 0] + 3 * network.thetas[i][:, 0])
+        # derivate[i] /= network.train_size
         derivate[i] = total_delta[i] / network.train_size
         i += 1
     return derivate
@@ -273,15 +279,25 @@ def feature_scaling(df, stats):
     return df
 
 
+def layers_init(hidden_layers, units, n_features, n_class):
+    i = 0
+    layers = [layer(n_features)]
+    while i < hidden_layers:
+        layers.append(layer(units))
+        i += 1
+    layers.append(layer(n_class))
+    return layers
+
+
 def main():
     start = timeit.default_timer()
-    df = get_data(sys.argv)
+    df, args = get_data()
     pd.set_option('display.expand_frame_repr', False)
     pd.set_option('display.max_rows', len(df))
     df = df.rename(columns={0: "id", 1: "class"})
     df = df.drop(columns=['id'])
-    #df = df.drop(columns=['id', 20, 13, 11, 16])
-    #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22])
+    # df = df.drop(columns=['id', 20, 13, 11, 16])
+    # df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22])
     #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22, 26, 21, 19, 15, 10, 6])
     stats = get_stats(df)
     df = feature_scaling(df, stats)
@@ -289,11 +305,7 @@ def main():
     df['vec_class'] = df['class'].map({1: [1, 0], 0: [0, 1]})
     #df = df.sample(frac=1)
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
-    layers = [
-            layer(len(df.columns) - 2),
-            layer(24),
-            layer(24),
-            layer(2)]
+    layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
     net = network(layers, dfs[0], dfs[1])
     gradient_descent(net)
     stop = timeit.default_timer()
