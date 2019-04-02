@@ -71,15 +71,23 @@ def check_ipositive_null(value):
     return ivalue
 
 
+def check_outliers(value):
+    fvalue = float(value)
+    if fvalue < 0.0 or fvalue > 4.0:
+        raise argparse.ArgumentTypeError("%s is an invalid z score (must be 0 < z < 3)" % value)
+    return fvalue
+
+
 def get_data():
     parser = argparse.ArgumentParser()
-    parser.add_argument("data", help="a dataset", nargs='?', default="data.csv")
+    parser.add_argument("data", help="a data set", nargs='?', default="data.csv")
     parser.add_argument("-L", "--layers", help="Number of layers", type=check_ipositive, default=2)
     parser.add_argument("-U", "--units", help="Number of units per layer", type=check_ipositive, default=12)
     parser.add_argument("-lr", "--learning_rate", help="Learning Rate's value", type=check_fpositive, default=1.0)
     parser.add_argument("-i", "--iterations", help="Number of iterations", type=check_ipositive, default=80)
     parser.add_argument("-la", "--lmbd", help="Lambda's value for regularization", type=check_fpositive_null, default=0.0)
-    parser.add_argument("-o", "--outliers", help="Drop outliers with the z score given", type=check_ipositive_null, default=0)
+    parser.add_argument("-o", "--outliers", help="Drop outliers with the z score given", type=check_outliers, default=0.0)
+    parser.add_argument("-shu", "--shuffle", help="Shuffle the data set", action="store_true")
     args = parser.parse_args()
     try:
         data = pd.read_csv(args.data, header=None)
@@ -252,16 +260,11 @@ def cross_entropy(predict, y_class, network):
                 - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0]))))) + regularization
 
 
-def get_stats(df, drop_outliers):
+def get_stats(df):
     stats = {
             column: escribe(sub_dict)
             for column, sub_dict in df.select_dtypes(include='number').to_dict().items()}
-    if drop_outliers:
-        df_tmp = df.copy()
-        df_tmp = feature_scaling(df_tmp, stats)
-        df = df[(np.abs((df_tmp.select_dtypes(include='number'))) < drop_outliers).all(axis=1)] # a faire
-        return get_stats(df, 0)
-    return stats, df
+    return stats
 
 
 def percentile(percent, count, values):
@@ -344,12 +347,16 @@ def main():
     # df = df.drop(columns=['id', 20, 13, 11, 16])
     # df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22])
     #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22, 26, 21, 19, 15, 10, 6])
-    stats, df = get_stats(df, args.outliers)
+    stats = get_stats(df)
     df = feature_scaling(df, stats)
     df['class'] = df['class'].map({'M': 1, 'B': 0})
     df['vec_class'] = df['class'].map({1: [1, 0], 0: [0, 1]})
-    #df = df.sample(frac=1)
+    if args.shuffle:
+        df = df.sample(frac=1)
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
+    if args.outliers:
+        df_tmp = dfs[0].copy()
+        dfs[0] = dfs[0][(np.abs((df_tmp.select_dtypes(include='number'))) < args.outliers).all(axis=1)]
     layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
     net = network(layers, dfs[0], dfs[1], args)
     gradient_descent(net, learning_rate=args.learning_rate, iterations=args.iterations)
