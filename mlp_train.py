@@ -92,6 +92,7 @@ def get_data():
     parser.add_argument("-nag", "--nesterov", help="Nesterov’s Accelerated Momentum Gradient optimization", action="store_true")
     parser.add_argument("-mu", "--momentum", help="Momentum 's value fot NAG (Nesterov's Accelerated Momentum)", type=check_fpositive, default=0.01)
     parser.add_argument("-adg", "--adagrad", help="Adagrad optimization", action="store_true")
+    parser.add_argument("-ada", "--adam", help="Adam optimization", action="store_true")
     parser.add_argument("-rms", "--rmsprop", help="RMSprop optimization", action="store_true")
     args = parser.parse_args()
     try:
@@ -180,16 +181,14 @@ def plot_results(costs, valid_costs, epochs):
 
 
 def display_results(costs, valid_costs, epochs):
-    print(all(costs[i] >= costs[i+1] for i in range(len(costs)-1)))
-    print(all(valid_costs[i] >= valid_costs[i+1] for i in range(len(valid_costs)-1)))
-    print("train cost 5 = ", costs[epochs-5])
-    print("valid cost 5 = ", valid_costs[epochs-5])
-    print("train cost 4 = ", costs[epochs-4])
-    print("valid cost 4 = ", valid_costs[epochs-4])
-    print("train cost 3 = ", costs[epochs-3])
-    print("valid cost 3 = ", valid_costs[epochs-3])
-    print("train cost 2 = ", costs[epochs-2])
-    print("valid cost 2 = ", valid_costs[epochs-2])
+    if all(costs[i] >= costs[i+1] for i in range(epochs-1)):
+        print('\x1b[1;32;40m' + 'Train : Cost always decrease.' + '\x1b[0m')
+    else:
+        print('\x1b[1;31;40m' + 'Train : Cost don\'t always decrease (Try smaller Learning Rate ?).' + '\x1b[0m')
+    if all(valid_costs[i] >= valid_costs[i+1] for i in range(epochs-1)):
+        print('\x1b[1;32;40m' + 'Valid : Cost always decrease.' + '\x1b[0m')
+    else:
+        print('\x1b[1;31;40m' + 'Valid : Cost don\'t always decrease.' + '\x1b[0m')
     print("train cost = ", costs[epochs-1])
     print("valid cost = ", valid_costs[epochs-1])
     plot_results(costs, valid_costs, epochs)
@@ -250,6 +249,32 @@ def gradient_descent_adg(net, loss='cross_entropy', learning_rate=1.0, batch_siz
         while j < net.size - 1:
             cache[j] += derivate[j]**2
             net.thetas[j] = net.thetas[j] - learning_rate * derivate[j] / (np.sqrt(cache[j]) + eps)
+            j += 1
+        add_cost(net, costs, valid_costs)
+        i += 1
+    stop = timeit.default_timer()
+    print('Time Gradient: ', stop - start)
+    display_results(costs, valid_costs, epochs)
+    return 1
+
+
+def gradient_descent_adam(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
+    start = timeit.default_timer()
+    costs = []
+    valid_costs = []
+    i = 0
+    eps = 0.00000001
+    beta1 = 0.9
+    beta2 = 0.999
+    m = copy.deepcopy(net.deltas)
+    v = copy.deepcopy(net.deltas)
+    while i < epochs:
+        derivate = backward_pro(net)
+        j = 0
+        while j < net.size - 1:
+            m[j] = beta1 * m[j] + (1 - beta1) * derivate[j]
+            v[j] = beta2 * v[j] + (1 - beta2) * (derivate[j]**2)
+            net.thetas[j] = net.thetas[j] - learning_rate * m[j] / (np.sqrt(v[j]) + eps)
             j += 1
         add_cost(net, costs, valid_costs)
         i += 1
@@ -604,6 +629,8 @@ def main():
         gradient_descent_rms(net, learning_rate=args.learning_rate, epochs=args.epochs)
     elif args.adagrad:
         gradient_descent_adg(net, learning_rate=args.learning_rate, epochs=args.epochs)
+    elif args.adam:
+        gradient_descent_adam(net, learning_rate=args.learning_rate, epochs=args.epochs)
     elif not args.batch_size:
         gradient_descent(net, learning_rate=args.learning_rate, epochs=args.epochs)
     else:
