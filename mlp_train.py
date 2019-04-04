@@ -89,6 +89,10 @@ def get_data():
     parser.add_argument("-la", "--lmbd", help="Lambda's value for regularization", type=check_fpositive_null, default=0.0)
     parser.add_argument("-o", "--outliers", help="Drop outliers with the z score given", type=check_outliers, default=0.0)
     parser.add_argument("-shu", "--shuffle", help="Shuffle the data set", action="store_true")
+    parser.add_argument("-nag", "--nesterov", help="Nesterov’s Accelerated Momentum Gradient optimization", action="store_true")
+    parser.add_argument("-mu", "--momentum", help="Momentum 's value fot NAG (Nesterov's Accelerated Momentum)", type=check_fpositive, default=0.01)
+    parser.add_argument("-adg", "--adagrad", help="Adagrad optimization", action="store_true")
+    parser.add_argument("-rms", "--rmsprop", help="RMSprop optimization", action="store_true")
     args = parser.parse_args()
     try:
         data = pd.read_csv(args.data, header=None)
@@ -124,7 +128,7 @@ class network:
         self.valid_y = data_valid['class'].to_numpy()
         self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
         self.lmbd = args.lmbd
-        self.momentum = 0.001
+        self.momentum = args.momentum
         self.velocity = []
         self.thetas = []
         self.deltas = []
@@ -152,125 +156,158 @@ class network:
         self.batched_vec_y = np.split(self.vec_y, sections)
 
 
-def gradient_descent(network, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
+def add_cost(net, costs, valid_costs):
+    new_cost = cross_entropy(np.asarray(net.predict), net.vec_y, net.lmbd, net)
+    new_valid_cost = cross_entropy(
+            np.asarray(net.valid_predict), net.valid_vec_y, 0, net)
+    costs.append(new_cost)
+    valid_costs.append(new_valid_cost)
+    net.predict.clear()
+    net.valid_predict.clear()
+
+
+def plot_results(costs, valid_costs, epochs):
+    plt.xlabel('No. of epochs')
+    plt.ylabel('Cost Function')
+    plt.title("Cost Function Evolution")
+    plt.plot(
+            np.arange(epochs),
+            costs)
+    plt.plot(
+            np.arange(epochs),
+            valid_costs)
+    plt.show()
+
+
+def display_results(costs, valid_costs, epochs):
+    print(all(costs[i] >= costs[i+1] for i in range(len(costs)-1)))
+    print(all(valid_costs[i] >= valid_costs[i+1] for i in range(len(valid_costs)-1)))
+    print("train cost 5 = ", costs[epochs-5])
+    print("valid cost 5 = ", valid_costs[epochs-5])
+    print("train cost 4 = ", costs[epochs-4])
+    print("valid cost 4 = ", valid_costs[epochs-4])
+    print("train cost 3 = ", costs[epochs-3])
+    print("valid cost 3 = ", valid_costs[epochs-3])
+    print("train cost 2 = ", costs[epochs-2])
+    print("valid cost 2 = ", valid_costs[epochs-2])
+    print("train cost = ", costs[epochs-1])
+    print("valid cost = ", valid_costs[epochs-1])
+    plot_results(costs, valid_costs, epochs)
+
+
+def gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
+    start = timeit.default_timer()
+    costs = []
+    valid_costs = []
+    i = 0
+    while i < epochs:
+        derivate = backward_pro(net)
+        j = 0
+        while j < net.size - 1:
+            net.thetas[j] = net.thetas[j] - learning_rate * derivate[j]
+            j += 1
+        add_cost(net, costs, valid_costs)
+        i += 1
+    stop = timeit.default_timer()
+    print('Time Gradient: ', stop - start)
+    display_results(costs, valid_costs, epochs)
+    return 1
+
+
+def gradient_descent_rms(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
+    start = timeit.default_timer()
+    costs = []
+    valid_costs = []
+    i = 0
+    decay_rate = 0.9
+    eps = 0.00001
+    cache = copy.deepcopy(net.deltas)
+    while i < epochs:
+        derivate = backward_pro(net)
+        j = 0
+        while j < net.size - 1:
+            cache[j] = decay_rate * cache[j] + (1 - decay_rate) * derivate[j]**2
+            net.thetas[j] = net.thetas[j] - learning_rate * derivate[j] / (np.sqrt(cache[j]) + eps)
+            j += 1
+        add_cost(net, costs, valid_costs)
+        i += 1
+    stop = timeit.default_timer()
+    print('Time to perform RMSprop Gradient: ', stop - start)
+    display_results(costs, valid_costs, epochs)
+    return 1
+
+
+def gradient_descent_adg(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
+    start = timeit.default_timer()
+    costs = []
+    valid_costs = []
+    i = 0
+    eps = 0.00001
+    cache = copy.deepcopy(net.deltas)
+    while i < epochs:
+        derivate = backward_pro(net)
+        j = 0
+        while j < net.size - 1:
+            cache[j] += derivate[j]**2
+            net.thetas[j] = net.thetas[j] - learning_rate * derivate[j] / (np.sqrt(cache[j]) + eps)
+            j += 1
+        add_cost(net, costs, valid_costs)
+        i += 1
+    stop = timeit.default_timer()
+    print('Time Gradient: ', stop - start)
+    display_results(costs, valid_costs, epochs)
+    return 1
+
+
+def gradient_descent_nes(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
     costs = []
     valid_costs = []
     i = 0
     start = timeit.default_timer()
     while i < epochs:
-        derivate = backward_pro(network)
+        #derivate = backward_pro(net)
+        derivate = backward_pro_nes(net)
         j = 0
-        while j < network.size - 1:
-            network.thetas[j] = network.thetas[j] - learning_rate * derivate[j]
+        #test = copy.deepcopy(net.velocity) # a enlever
+        while j < net.size - 1:
+            net.velocity[j] = net.momentum * net.velocity[j] - learning_rate * derivate[j]
+            #net.thetas[j] = net.thetas[j] - net.momentum * test[j] + ((1 + net.momentum) * net.velocity[j])
+            net.thetas[j] = net.thetas[j] + net.velocity[j]
             j += 1
-        new_cost = cross_entropy(np.asarray(network.predict), network.vec_y, network.lmbd, network)
-        new_valid_cost = cross_entropy(
-                np.asarray(network.valid_predict), network.valid_vec_y, 0, network)
-        costs.append(new_cost)
-        valid_costs.append(new_valid_cost)
-        network.predict.clear()
-        network.valid_predict.clear()
+        add_cost(net, costs, valid_costs)
         i += 1
     stop = timeit.default_timer()
-    print('Time Gradient: ', stop - start)
-    print("train cost = ", new_cost)
-    print("valid cost = ", new_valid_cost)
-    # plt.xlabel('No. of epochs')
-    # plt.ylabel('Cost Function')
-    # plt.title("Cost Function Evolution")
-    # plt.plot(
-    #         np.arange(epochs),
-    #         costs)
-    # plt.plot(
-    #         np.arange(epochs),
-    #         valid_costs)
-    # plt.show()
+    print('Time to perform Nesterov Accelerated Momentum Gradient: ', stop - start)
+    display_results(costs, valid_costs, epochs)
     return 1
 
 
-def gradient_descent_nes(network, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
+def stochastic_gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
     costs = []
     valid_costs = []
-    i = 0
-    start = timeit.default_timer()
-    while i < epochs:
-        #derivate = backward_pro(network)
-        derivate = backward_pro_nes(network)
-        j = 0
-        #test = copy.deepcopy(network.velocity) # a enlever
-        while j < network.size - 1:
-            network.velocity[j] = network.momentum * network.velocity[j] - learning_rate * derivate[j]
-            #network.thetas[j] = network.thetas[j] - network.momentum * test[j] + ((1 + network.momentum) * network.velocity[j])
-            network.thetas[j] = network.thetas[j] + network.velocity[j]
-            j += 1
-        new_cost = cross_entropy(np.asarray(network.predict), network.vec_y, network.lmbd, network)
-        new_valid_cost = cross_entropy(
-                np.asarray(network.valid_predict), network.valid_vec_y, 0, network)
-        costs.append(new_cost)
-        valid_costs.append(new_valid_cost)
-        network.predict.clear()
-        network.valid_predict.clear()
-        i += 1
-    stop = timeit.default_timer()
-    print('Time Gradient: ', stop - start)
-    print("train cost = ", new_cost)
-    print("valid cost = ", new_valid_cost)
-    # plt.xlabel('No. of epochs')
-    # plt.ylabel('Cost Function')
-    # plt.title("Cost Function Evolution")
-    # plt.plot(
-    #         np.arange(epochs),
-    #         costs)
-    # plt.plot(
-    #         np.arange(epochs),
-    #         valid_costs)
-    # plt.show()
-    return 1
-
-
-def stochastic_gradient_descent(network, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
-    costs = []
-    valid_costs = []
-    n_batch = len(network.batched_x)
+    n_batch = len(net.batched_x)
     e = 0
     start = timeit.default_timer()
     while e < epochs:
         b = 0
         while b < n_batch:
-            derivate = backward_pro_sto(network, network.batched_x[b], network.batched_vec_y[b])
+            derivate = backward_pro_sto(net, net.batched_x[b], net.batched_vec_y[b])
             j = 0
-            while j < network.size - 1:
-                network.thetas[j] = network.thetas[j] - learning_rate * derivate[j]
+            while j < net.size - 1:
+                net.thetas[j] = net.thetas[j] - learning_rate * derivate[j]
                 j += 1
             b += 1
         c = 0
-        while c < network.train_size:
-            if c < network.valid_size:
-                forward_pro(network, network.valid_x[c], train=False)
-            forward_pro(network, network.x[c])
+        while c < net.train_size:
+            if c < net.valid_size:
+                forward_pro(net, net.valid_x[c], train=False)
+            forward_pro(net, net.x[c])
             c += 1
-        new_cost = cross_entropy(np.asarray(network.predict), network.vec_y, network.lmbd, network)
-        new_valid_cost = cross_entropy(
-                np.asarray(network.valid_predict), network.valid_vec_y, 0, network)
-        costs.append(new_cost)
-        valid_costs.append(new_valid_cost)
-        network.predict.clear()
-        network.valid_predict.clear()
+        add_cost(net, costs, valid_costs)
         e += 1
     stop = timeit.default_timer()
     print('Time Stochastic Gradient: ', stop - start)
-    print("train cost = ", new_cost)
-    print("valid cost = ", new_valid_cost)
-    # plt.xlabel('No. of epochs')
-    # plt.ylabel('Cost Function')
-    # plt.title("Cost Function Evolution")
-    # plt.plot(
-    #         np.arange(epochs),
-    #         costs)
-    # plt.plot(
-    #         np.arange(epochs),
-    #         valid_costs)
-    # plt.show()
+    display_results(costs, valid_costs, epochs)
     return 1
 
 
@@ -279,41 +316,41 @@ def theta_init(layer_1, layer_2, seed=0, eps=0.5):
     return np.random.rand(layer_2, layer_1 + 1) * 2 * eps - eps
 
 
-def forward_pro(network, row, train=True):
+def forward_pro(net, row, train=True):
     activ_dict = {
             'sigmoid': sigmoid,
     }
     i = 0
     a = [row.reshape(-1, 1)]
     b = np.array([[1.0]]).reshape(1, 1)
-    while i < network.size - 1:
+    while i < net.size - 1:
         a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(activ_dict[network.layers[i].activation](
-            network.thetas[i].dot(a[i])))
+        a.append(activ_dict[net.layers[i].activation](
+            net.thetas[i].dot(a[i])))
         i += 1
     if train:
-        network.predict.append(a[i])
+        net.predict.append(a[i])
     else:
-        network.valid_predict.append(a[i])
+        net.valid_predict.append(a[i])
     return a
 
 
-def forward_pro_sto(network, row):
+def forward_pro_sto(net, row):
     activ_dict = {
             'sigmoid': sigmoid,
     }
     i = 0
     a = [row.reshape(-1, 1)]
     b = np.array([[1.0]]).reshape(1, 1)
-    while i < network.size - 1:
+    while i < net.size - 1:
         a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(activ_dict[network.layers[i].activation](
-            network.thetas[i].dot(a[i])))
+        a.append(activ_dict[net.layers[i].activation](
+            net.thetas[i].dot(a[i])))
         i += 1
     return a
 
 
-def forward_pro_nes(network, row, train=True):
+def forward_pro_nes(net, row, train=True):
     activ_dict = {
             'sigmoid': sigmoid,
     }
@@ -321,115 +358,109 @@ def forward_pro_nes(network, row, train=True):
     a = [row.reshape(-1, 1)]
     a_nes = [row.reshape(-1, 1)]
     b = np.array([[1.0]]).reshape(1, 1)
-    while i < network.size - 1:
+    while i < net.size - 1:
         a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(activ_dict[network.layers[i].activation](
-            network.thetas[i].dot(a[i])))
+        a.append(activ_dict[net.layers[i].activation](
+            net.thetas[i].dot(a[i])))
         if train:
             a_nes[i] = np.concatenate((b, a_nes[i]), axis=0)
-            a_nes.append(activ_dict[network.layers[i].activation](
-                (network.thetas[i] + (network.momentum * network.velocity[i])).dot(a_nes[i])))
+            a_nes.append(activ_dict[net.layers[i].activation](
+                (net.thetas[i] + (net.momentum * net.velocity[i])).dot(a_nes[i])))
         i += 1
     if train:
-        network.predict.append(a[i])
+        net.predict.append(a[i])
     else:
-        network.valid_predict.append(a[i])
+        net.valid_predict.append(a[i])
     return a_nes
 
 
-def backward_pro(network):
+def backward_pro(net):
     i = 0
-    delta = [0] * (network.size)
-    total_delta = copy.deepcopy(network.deltas)
-    derivate = [0] * (network.size - 1)
-    while i < network.train_size:
-        if i < network.valid_size:
-            forward_pro(network, network.valid_x[i], train=False)
-        a = forward_pro(network, network.x[i])
-        j = network.size - 1
-        delta[j] = a[j] - network.vec_y[i].reshape(-1, 1)
+    delta = [0] * (net.size)
+    total_delta = copy.deepcopy(net.deltas)
+    derivate = [0] * (net.size - 1)
+    while i < net.train_size:
+        if i < net.valid_size:
+            forward_pro(net, net.valid_x[i], train=False)
+        a = forward_pro(net, net.x[i])
+        j = net.size - 1
+        delta[j] = a[j] - net.vec_y[i].reshape(-1, 1)
         j -= 1
         while j > 0:
-            delta[j] = network.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
+            delta[j] = net.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
             total_delta[j] += delta[j + 1] * a[j].T
             delta[j] = delta[j][1:, :]
             j -= 1
         total_delta[j] += delta[j + 1] * a[j].T
         i += 1
     i = 0
-    while i < network.size - 1:
-        if not network.lmbd:
-            derivate[i] = total_delta[i] / network.train_size
+    while i < net.size - 1:
+        if not net.lmbd:
+            derivate[i] = total_delta[i] / net.train_size
         else:
-            derivate[i] = (total_delta[i] + network.lmbd * network.thetas[i]) # can add to the lasts column direct ? init derivate as np array ?
-            derivate[i][:, 0] -= (total_delta[i][:, 0] + network.lmbd * network.thetas[i][:, 0])
-            derivate[i] /= network.train_size
+            derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i]) # can add to the lasts column direct ? init derivate as np array ?
+            derivate[i][:, 0] -= (total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
+            derivate[i] /= net.train_size
         i += 1
     return derivate
 
 
-def backward_pro_nes(network):
+def backward_pro_nes(net):
     i = 0
-    delta = [0] * (network.size)
-    total_delta = copy.deepcopy(network.deltas)
-    derivate = [0] * (network.size - 1)
-    while i < network.train_size:
-        if i < network.valid_size:
-            forward_pro_nes(network, network.valid_x[i], train=False)
-        a = forward_pro_nes(network, network.x[i])
-        j = network.size - 1
-        delta[j] = a[j] - network.vec_y[i].reshape(-1, 1)
+    delta = [0] * (net.size)
+    total_delta = copy.deepcopy(net.deltas)
+    derivate = [0] * (net.size - 1)
+    while i < net.train_size:
+        if i < net.valid_size:
+            forward_pro_nes(net, net.valid_x[i], train=False)
+        a = forward_pro_nes(net, net.x[i])
+        j = net.size - 1
+        delta[j] = a[j] - net.vec_y[i].reshape(-1, 1)
         j -= 1
         while j > 0:
-            delta[j] = (network.thetas[j] + (network.momentum * network.velocity[j])).T.dot(delta[j + 1]) * a[j] * (1 - a[j])
+            delta[j] = (net.thetas[j] + (net.momentum * net.velocity[j])).T.dot(delta[j + 1]) * a[j] * (1 - a[j])
             total_delta[j] += delta[j + 1] * a[j].T
             delta[j] = delta[j][1:, :]
             j -= 1
         total_delta[j] += delta[j + 1] * a[j].T
         i += 1
     i = 0
-    while i < network.size - 1:
-        if not network.lmbd:
-            derivate[i] = total_delta[i] / network.train_size
+    while i < net.size - 1:
+        if not net.lmbd:
+            derivate[i] = total_delta[i] / net.train_size
         else:
-            derivate[i] = total_delta[i] + network.lmbd * (network.thetas[i] + (network.momentum * network.velocity[i])) # can add to the lasts column direct ? init derivate as np array ?
-            # describe(i)
-            # describe(total_delta[i][:, 0])
-            # describe(network.lmbd)
-            # describe(network.momentum)
-            # describe(network.velocity[i])
-            # describe(network.lmbd * (network.thetas[i][:, 0] + (network.momentum * network.velocity[i])))
-            derivate[i][:, 0] -= total_delta[i][:, 0] + (network.lmbd * (network.thetas[i][:, 0] + (network.momentum * network.velocity[i][:, 0])))
-            derivate[i] /= network.train_size
+            derivate[i] = total_delta[i] + net.lmbd * (net.thetas[i] + (net.momentum * net.velocity[i])) # can add to the lasts column direct ? init derivate as np array ?
+            derivate[i][:, 0] -= total_delta[i][:, 0] + (net.lmbd * (net.thetas[i][:, 0] + (net.momentum * net.velocity[i][:, 0])))
+            derivate[i] /= net.train_size
         i += 1
     return derivate
 
 
-def backward_pro_sto(network, x, vec_y):
+def backward_pro_sto(net, x, vec_y):
     i = 0
-    delta = [0] * (network.size)
-    total_delta = copy.deepcopy(network.deltas)
-    derivate = [0] * (network.size - 1)
+    delta = [0] * (net.size)
+    total_delta = copy.deepcopy(net.deltas)
+    derivate = [0] * (net.size - 1)
     batch_size = len(x)
     while i < batch_size:
-        a = forward_pro_sto(network, x[i])
-        j = network.size - 1
+        a = forward_pro_sto(net, x[i])
+        j = net.size - 1
         delta[j] = a[j] - vec_y[i].reshape(-1, 1)
         j -= 1
         while j > 0:
-            delta[j] = network.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
+            delta[j] = net.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
             total_delta[j] += delta[j + 1] * a[j].T
             delta[j] = delta[j][1:, :]
             j -= 1
         total_delta[j] += delta[j + 1] * a[j].T
         i += 1
     i = 0
-    while i < network.size - 1:
-        if not network.lmbd:
+    while i < net.size - 1:
+        if not net.lmbd:
             derivate[i] = total_delta[i] / batch_size
         else:
-            derivate[i] = (total_delta[i] + network.lmbd * network.thetas[i]) # can add to the lasts column direct ? init derivate as np array ?
-            derivate[i][:, 0] -= (total_delta[i][:, 0] + network.lmbd * network.thetas[i][:, 0])
+            derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i]) # can add to the lasts column direct ? init derivate as np array ?
+            derivate[i][:, 0] -= (total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
             derivate[i] /= batch_size
         i += 1
     return derivate
@@ -448,7 +479,7 @@ def softmax(h):
     return results
 
 
-def cross_entropy(predict, y_class, lmbd, network):
+def cross_entropy(predict, y_class, lmbd, net):
     size = np.size(predict, 0)
     predict = predict.reshape(-1, 2)
     # to do : add counter of class for modularity
@@ -456,10 +487,10 @@ def cross_entropy(predict, y_class, lmbd, network):
     if lmbd:
         i = 0
         thetas_sum = 0
-        while i < network.size - 1:
-            thetas_sum += np.sum(network.thetas[i] ** 2)
+        while i < net.size - 1:
+            thetas_sum += np.sum(net.thetas[i] ** 2)
             i += 1
-        regularization = lmbd / (2 * size) * thetas_sum # can be calc once with attribute in network (else : train + valid)
+        regularization = lmbd / (2 * size) * thetas_sum # can be calc once with attribute in net (else : train + valid)
     # y_0 = (-1 * y_class[:, 0].T.dot((np.log(predict[:, 0]))) - (1 - y_class[:, 0]).T.dot((np.log(1 - predict[:, 0]))))
     # y_1 = (-1 * y_class[:, 1].T.dot((np.log(predict[:, 1]))) - (1 - y_class[:, 1]).T.dot((np.log(1 - predict[:, 1]))))
     # return (1 / size) * (y_0 + y_1) + regularization
@@ -567,17 +598,13 @@ def main():
         dfs[0] = dfs[0][(np.abs((df_tmp.select_dtypes(include='number'))) < args.outliers).all(axis=1)]
     layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
     net = network(layers, dfs[0], dfs[1], args)
-    # if not args.batch_size
-    # or args.batch_size >= net.train_size
-    # or float(args.batch_size) < (float(net.train_size) / 2.0):
-    #     gradient_descent(net, learning_rate=args.learning_rate, epochs=args.epochs)
-    # else args.batch_size:
-    #     net.split(args.batch_size)
-    #     if args.batch_size < net.valid_size:
-    #         stochastic_gradient_descent(net, learning_rate=args.learning_rate, batch_size=args.batch_size, epochs=args.epochs)
-    #     else:
-    #         batched_gradient_descent(net, learning_rate=args.learning_rate, batch_size=args.batch_size, epochs=args.epochs)
-    if not args.batch_size:
+    if args.nesterov:
+        gradient_descent_nes(net, learning_rate=args.learning_rate, epochs=args.epochs)
+    elif args.rmsprop:
+        gradient_descent_rms(net, learning_rate=args.learning_rate, epochs=args.epochs)
+    elif args.adagrad:
+        gradient_descent_adg(net, learning_rate=args.learning_rate, epochs=args.epochs)
+    elif not args.batch_size:
         gradient_descent(net, learning_rate=args.learning_rate, epochs=args.epochs)
     else:
         net.split(args.batch_size)
