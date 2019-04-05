@@ -94,6 +94,8 @@ def get_data():
     parser.add_argument("-adg", "--adagrad", help="Adagrad optimization", action="store_true")
     parser.add_argument("-ada", "--adam", help="Adam optimization", action="store_true")
     parser.add_argument("-rms", "--rmsprop", help="RMSprop optimization", action="store_true")
+    parser.add_argument("-es", "--early_stopping", help="Early Stopping Activation", action="store_true")
+    parser.add_argument("-pat", "--patience", help="Number of epochs waited to execute early stopping", type=check_ipositive_null, default=0)
     args = parser.parse_args()
     try:
         data = pd.read_csv(args.data, header=None)
@@ -130,8 +132,13 @@ class network:
         self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
         self.lmbd = args.lmbd
         self.momentum = args.momentum
+        self.patience = args.patience
+        self.early_stop_counter = 0
+        self.early_stop_index = 0
+        self.early_stop_min = None
         self.velocity = []
         self.thetas = []
+        self.best_thetas = []
         self.deltas = []
         self.predict = []
         self.valid_predict = []
@@ -141,6 +148,8 @@ class network:
                 self.layers[i].size,
                 self.layers[i + 1].size,
                 self.layers[i].seed))
+            self.best_thetas.append(theta_init(
+                self.layers[i].size, self.layers[i + 1].size, eps=0.0))
             self.deltas.append(theta_init(
                 self.layers[i].size, self.layers[i + 1].size, eps=0.0))
             self.velocity.append(theta_init(
@@ -155,6 +164,21 @@ class network:
             index += batch_size
         self.batched_x = np.split(self.x, sections)
         self.batched_vec_y = np.split(self.vec_y, sections)
+
+    def early_stopping(self, val_costs, index):
+        if self.early_stop_min is None:
+            self.early_stop_min = val_costs[index]
+        if self.early_stop_min >= val_costs[index]:
+            self.early_stop_min = val_costs[index]
+            self.early_stop_counter = 0
+            self.best_thetas = copy.deepcopy(self.thetas)
+            self.early_stop_index = index
+            return 0
+        elif self.patience > self.early_stop_counter:
+            self.early_stop_counter += 1
+            return 0
+        else:
+            return 1
 
 
 def add_cost(net, costs, valid_costs):
@@ -173,10 +197,10 @@ def plot_results(costs, valid_costs, epochs):
     plt.title("Cost Function Evolution")
     plt.plot(
             np.arange(epochs),
-            costs)
+            costs[:epochs])
     plt.plot(
             np.arange(epochs),
-            valid_costs)
+            valid_costs[:epochs])
     plt.show()
 
 
@@ -191,25 +215,35 @@ def display_results(costs, valid_costs, epochs):
         print('\x1b[1;31;40m' + 'Valid : Cost don\'t always decrease.' + '\x1b[0m')
     print("train cost = ", costs[epochs-1])
     print("valid cost = ", valid_costs[epochs-1])
-    plot_results(costs, valid_costs, epochs)
+    #plot_results(costs, valid_costs, epochs)
 
 
-def gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80):
+def gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80, early_stop=False):
     start = timeit.default_timer()
     costs = []
     valid_costs = []
+    non_stop = 1
     i = 0
     while i < epochs:
         derivate = backward_pro(net)
+        add_cost(net, costs, valid_costs)
+        if early_stop and net.early_stopping(valid_costs, i):
+            non_stop = 0
+            break
+        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
         j = 0
         while j < net.size - 1:
             net.thetas[j] = net.thetas[j] - learning_rate * derivate[j]
             j += 1
-        add_cost(net, costs, valid_costs)
+        # add_cost(net, costs, valid_costs)
+        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
         i += 1
     stop = timeit.default_timer()
     print('Time Gradient: ', stop - start)
-    display_results(costs, valid_costs, epochs)
+    if non_stop:
+        display_results(costs, valid_costs, epochs)
+    else:
+        display_results(costs, valid_costs, net.early_stop_index + 1)
     return 1
 
 
@@ -632,7 +666,7 @@ def main():
     elif args.adam:
         gradient_descent_adam(net, learning_rate=args.learning_rate, epochs=args.epochs)
     elif not args.batch_size:
-        gradient_descent(net, learning_rate=args.learning_rate, epochs=args.epochs)
+        gradient_descent(net, learning_rate=args.learning_rate, epochs=args.epochs, early_stop=args.early_stopping)
     else:
         net.split(args.batch_size)
         stochastic_gradient_descent(net, learning_rate=args.learning_rate, batch_size=args.batch_size, epochs=args.epochs)
