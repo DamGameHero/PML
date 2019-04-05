@@ -130,6 +130,7 @@ class network:
         self.vec_y = np.asarray(data_train['vec_class'].tolist())
         self.valid_y = data_valid['class'].to_numpy()
         self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
+        self.n_class = len(np.unique(self.y))
         self.lmbd = args.lmbd
         self.momentum = args.momentum
         self.patience = args.patience
@@ -182,13 +183,11 @@ class network:
 
 
 def add_cost(net, costs, valid_costs):
-    new_cost = cross_entropy(np.asarray(net.predict), net.vec_y, net.lmbd, net)
-    new_valid_cost = cross_entropy(
+    new_cost = binary_cross_entropy(np.asarray(net.predict), net.vec_y, net.lmbd, net)
+    new_valid_cost = binary_cross_entropy(
             np.asarray(net.valid_predict), net.valid_vec_y, 0, net)
     costs.append(new_cost)
     valid_costs.append(new_valid_cost)
-    net.predict.clear()
-    net.valid_predict.clear()
 
 
 def plot_results(costs, valid_costs, epochs):
@@ -232,14 +231,21 @@ def gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0,
             break
         # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
         j = 0
-        while j < net.size - 1:
-            net.thetas[j] = net.thetas[j] - learning_rate * derivate[j]
-            j += 1
+        if i < epochs-1:
+            net.predict.clear()
+            net.valid_predict.clear()
+            while j < net.size-1:
+                net.thetas[j] = net.thetas[j] - learning_rate * derivate[j]
+                j += 1
         # add_cost(net, costs, valid_costs)
         # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
         i += 1
     stop = timeit.default_timer()
     print('Time Gradient: ', stop - start)
+    # h = cross_entropy(
+    #         np.asarray(net.valid_predict), net.valid_vec_y, 0, net)
+    p = softmax(np.asarray(net.valid_predict), net.n_class)
+    display_softmax(p, net.valid_y)
     if non_stop:
         display_results(costs, valid_costs, epochs)
     else:
@@ -529,16 +535,37 @@ def sigmoid(z):
     return 1 / (1 + np.exp(-1 * z))
 
 
-def softmax(h):
-    results = []
+def softmax(h, n_class):
+    # results = []
+    # i = 0
+    # describe(n_class)
+    # h = h.reshape(-1, 2)
+    # while i < n_class:
+    #     results.append(np.exp(-1 * h[:, i]) / (np.sum(np.exp(-1 * h))))
+    #     i += 1
+    # return results
+    h = h.reshape(-1, 2)
+    return np.exp(h) / (np.sum(np.exp(h), axis=1)[:, None])
+
+
+def display_softmax(p, y):
+    y_predict = p.argmin(axis=1)
     i = 0
-    while i < len(h):
-        results.append(np.exp(-1 * h[i]) / (np.sum(np.exp(-1 * h))))
+    good = 0
+    size = len(y)
+    ok = "\x1b[1;32;40m"
+    no = "\x1b[1;31;40m"
+    while i < size:
+        if y[i] == y_predict[i]:
+            good += 1
+            print(ok + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
+        else:
+            print(no + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         i += 1
-    return results
+    print("Correctly Predicted : {}/{}".format(good, size))
 
 
-def cross_entropy(predict, y_class, lmbd, net):
+def binary_cross_entropy(predict, y_class, lmbd, net):
     size = np.size(predict, 0)
     predict = predict.reshape(-1, 2)
     # to do : add counter of class for modularity
@@ -549,13 +576,33 @@ def cross_entropy(predict, y_class, lmbd, net):
         while i < net.size - 1:
             thetas_sum += np.sum(net.thetas[i] ** 2)
             i += 1
-        regularization = lmbd / (2 * size) * thetas_sum # can be calc once with attribute in net (else : train + valid)
+        regularization = lmbd / (2 * size) * thetas_sum
     # y_0 = (-1 * y_class[:, 0].T.dot((np.log(predict[:, 0]))) - (1 - y_class[:, 0]).T.dot((np.log(1 - predict[:, 0]))))
     # y_1 = (-1 * y_class[:, 1].T.dot((np.log(predict[:, 1]))) - (1 - y_class[:, 1]).T.dot((np.log(1 - predict[:, 1]))))
     # return (1 / size) * (y_0 + y_1) + regularization
     return ((1 / size)
             * (-1 * y_class[:, 0].dot((np.log(predict[:, 0])))
                 - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0]))))) + regularization
+
+
+def cross_entropy(predict, y_class, lmbd, net):
+    Y = []
+    size = np.size(predict, 0)
+    predict = predict.reshape(-1, 2)
+    # to do : add counter of class for modularity
+    regularization = 0
+    if lmbd:
+        i = 0
+        thetas_sum = 0
+        while i < net.size - 1:
+            thetas_sum += np.sum(net.thetas[i] ** 2)
+            i += 1
+        regularization = lmbd / (2 * size) * thetas_sum
+    i = 0
+    while (i < net.n_class):
+        Y.append(-1 * y_class[:, i].T.dot((np.log(predict[:, i]))) - (1 - y_class[:, i]).T.dot((np.log(1 - predict[:, i]))))
+        i += 1
+    return (1 / size) * (sum(Y)) + regularization
 
 
 def get_stats(df):
