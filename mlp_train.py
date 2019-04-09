@@ -107,7 +107,7 @@ def get_data():
 
 
 class layer:
-    seed_id = 2019
+    seed_id = 0
 
     def __init__(self, size, activation='sigmoid'):
         self.size = size
@@ -229,7 +229,7 @@ def gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0,
         if early_stop and net.early_stopping(valid_costs, i):
             non_stop = 0
             break
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
+        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i+1, epochs, costs[i], valid_costs[i]))
         j = 0
         if i < epochs-1:
             net.predict.clear()
@@ -242,10 +242,7 @@ def gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0,
         i += 1
     stop = timeit.default_timer()
     print('Time Gradient: ', stop - start)
-    # h = cross_entropy(
-    #         np.asarray(net.valid_predict), net.valid_vec_y, 0, net)
-    p = softmax(np.asarray(net.valid_predict), net.n_class)
-    display_softmax(p, net.valid_y)
+    #display_softmax(np.asarray(net.valid_predict), net.valid_y)
     if non_stop:
         display_results(costs, valid_costs, epochs)
     else:
@@ -384,13 +381,14 @@ def theta_init(layer_1, layer_2, seed=0, eps=0.5):
 def forward_pro(net, row, train=True):
     activ_dict = {
             'sigmoid': sigmoid,
+            'softmax': softmax,
     }
     i = 0
     a = [row.reshape(-1, 1)]
     b = np.array([[1.0]]).reshape(1, 1)
     while i < net.size - 1:
         a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(activ_dict[net.layers[i].activation](
+        a.append(activ_dict[net.layers[i+1].activation](
             net.thetas[i].dot(a[i])))
         i += 1
     if train:
@@ -535,21 +533,21 @@ def sigmoid(z):
     return 1 / (1 + np.exp(-1 * z))
 
 
-def softmax(h, n_class):
+def softmax(z):
     # results = []
     # i = 0
     # describe(n_class)
-    # h = h.reshape(-1, 2)
-    # while i < n_class:
-    #     results.append(np.exp(-1 * h[:, i]) / (np.sum(np.exp(-1 * h))))
+    # z = z.reshape(-1, 2)
+    # wzile i < n_class:
+    #     results.append(np.exp(-1 * z[:, i]) / (np.sum(np.exp(-1 * z))))
     #     i += 1
     # return results
-    h = h.reshape(-1, 2)
-    return np.exp(h) / (np.sum(np.exp(h), axis=1)[:, None])
+    #z = z.reshape(-1, 2)
+    return np.exp(z) / (np.sum(np.exp(z), axis=0)[:, None])
 
 
 def display_softmax(p, y):
-    y_predict = p.argmin(axis=1)
+    y_predict = p.argmax(axis=1)
     i = 0
     good = 0
     size = len(y)
@@ -678,7 +676,7 @@ def layers_init(hidden_layers, units, n_features, n_class):
     while i < hidden_layers:
         layers.append(layer(units))
         i += 1
-    layers.append(layer(n_class))
+    layers.append(layer(n_class, activation='softmax')) #option
     return layers
 
 
@@ -695,7 +693,7 @@ def main():
     stats = get_stats(df)
     df = feature_scaling(df, stats)
     df['class'] = df['class'].map({'M': 1, 'B': 0})
-    df['vec_class'] = df['class'].map({1: [1, 0], 0: [0, 1]})
+    df['vec_class'] = df['class'].map({1: [0, 1], 0: [1, 0]})
     if args.shuffle:
         df = df.sample(frac=1)
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
