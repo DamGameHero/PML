@@ -59,22 +59,22 @@ def check_fpositive_null(value):
 
 def check_ipositive(value):
     ivalue = int(value)
-    if ivalue <= 0:
+    if ivalue <= 0 or ivalue > 1000000:
         raise argparse.ArgumentTypeError("%s is an invalid positive value" % value)
     return ivalue
 
 
 def check_ipositive_null(value):
     ivalue = int(value)
-    if ivalue < 0:
+    if ivalue < 0 or ivalue > 1000000:
         raise argparse.ArgumentTypeError("%s is an invalid positive or null value" % value)
     return ivalue
 
 
 def check_outliers(value):
     fvalue = float(value)
-    if fvalue < 0.0 or fvalue > 4.0:
-        raise argparse.ArgumentTypeError("%s is an invalid z score (must be 0 < z < 3)" % value)
+    if fvalue < 2.0 or fvalue > 4.0:
+        raise argparse.ArgumentTypeError("%s is an invalid z score (must be 2 < z <= 4)" % value)
     return fvalue
 
 
@@ -556,9 +556,21 @@ def display_softmax(p, y):
                 neg += 1
             print(no + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         i += 1
-    precision = float(true_positive/(true_positive + false_positive))
-    recall = float(true_positive/(true_positive + false_negative))
-    f_score = 2 * (precision * recall/(precision + recall))
+    try:
+        precision = float(true_positive/(true_positive + false_positive))
+    except Exception as e:
+        precision = 0
+        print(e.__doc__)
+    try:
+        recall = float(true_positive/(true_positive + false_negative))
+    except Exception as e:
+        recall = 0
+        print(e.__doc__)
+    try:
+        f_score = 2 * (precision * recall/(precision + recall))
+    except Exception as e:
+        f_score = 0
+        print(e.__doc__)
     print("Correctly Predicted : {}/{}".format(good, size))
     print(ok + "True Positive : {}/{}".format(true_positive, pos) + "\x1b[0m")
     print(ok + "True Negative : {}/{}".format(true_negative, neg) + "\x1b[0m")
@@ -688,9 +700,6 @@ def main():
     pd.set_option('display.max_rows', len(df))
     df = df.rename(columns={0: "id", 1: "class"})
     df = df.drop(columns=['id'])
-    # df = df.drop(columns=['id', 20, 13, 11, 16])
-    # df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22])
-    #df = df.drop(columns=['id', 4, 5, 24, 25, 20, 13, 11, 16, 14, 15, 29, 9, 22, 26, 21, 19, 15, 10, 6])
     stats = get_stats(df)
     df = feature_scaling(df, stats)
     df['class'] = df['class'].map({'M': 1, 'B': 0})
