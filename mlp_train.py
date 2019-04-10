@@ -88,14 +88,12 @@ def get_data():
     parser.add_argument("-e", "--epochs", help="Number of epochs", type=check_ipositive, default=80)
     parser.add_argument("-la", "--lmbd", help="Lambda's value for regularization", type=check_fpositive_null, default=0.0)
     parser.add_argument("-o", "--outliers", help="Drop outliers with the z score given", type=check_outliers, default=0.0)
+    parser.add_argument('-opt', '--optimizations', nargs='+', help='Optimization list for Gradient descent', choices=['normal', 'adam', 'adagrad', 'nesterov', 'rmsprop'], default=['normal'])
     parser.add_argument("-shu", "--shuffle", help="Shuffle the data set", action="store_true")
-    parser.add_argument("-nag", "--nesterov", help="Nesterov’s Accelerated Momentum Gradient optimization", action="store_true")
     parser.add_argument("-mu", "--momentum", help="Momentum 's value fot NAG (Nesterov's Accelerated Momentum)", type=check_fpositive, default=0.01)
-    parser.add_argument("-adg", "--adagrad", help="Adagrad optimization", action="store_true")
-    parser.add_argument("-ada", "--adam", help="Adam optimization", action="store_true")
-    parser.add_argument("-rms", "--rmsprop", help="RMSprop optimization", action="store_true")
     parser.add_argument("-es", "--early_stopping", help="Early Stopping Activation", action="store_true")
     parser.add_argument("-pat", "--patience", help="Number of epochs waited to execute early stopping", type=check_ipositive_null, default=0)
+    parser.add_argument("-nb", "--no_batch_too", help="Perform Gradient Descent also without batches (when batch_size is enabled)", action="store_true")
     args = parser.parse_args()
     try:
         data = pd.read_csv(args.data, header=None)
@@ -106,12 +104,24 @@ def get_data():
     return data, args
 
 
+def sigmoid(z):
+    return 1 / (1 + np.exp(-1 * z))
+
+
+def softmax(z):
+    return np.exp(z) / (np.sum(np.exp(z), axis=0)[:, None])
+
+
 class layer:
     seed_id = 0
+    activ_dict = {
+            'sigmoid': sigmoid,
+            'softmax': softmax,
+    }
 
     def __init__(self, size, activation='sigmoid'):
         self.size = size
-        self.activation = activation
+        self.activation = layer.activ_dict[activation]
         self.seed = layer.seed_id
         layer.seed_id += 1
 
@@ -182,27 +192,6 @@ class network:
             return 1
 
 
-def add_cost(net, costs, valid_costs):
-    new_cost = binary_cross_entropy(np.asarray(net.predict), net.vec_y, net.lmbd, net)
-    new_valid_cost = binary_cross_entropy(
-            np.asarray(net.valid_predict), net.valid_vec_y, 0, net)
-    costs.append(new_cost)
-    valid_costs.append(new_valid_cost)
-
-
-def plot_results(costs, valid_costs, epochs):
-    plt.xlabel('No. of epochs')
-    plt.ylabel('Cost Function')
-    plt.title("Cost Function Evolution")
-    plt.plot(
-            np.arange(epochs+1),
-            costs[:epochs+1])
-    plt.plot(
-            np.arange(epochs+1),
-            valid_costs[:epochs+1])
-    plt.show()
-
-
 def display_results(costs, valid_costs, epochs):
     if all(costs[i] >= costs[i+1] for i in range(epochs-1)):
         print('\x1b[1;32;40m' + 'Train : Cost always decrease.' + '\x1b[0m')
@@ -214,15 +203,77 @@ def display_results(costs, valid_costs, epochs):
         print('\x1b[1;31;40m' + 'Valid : Cost don\'t always decrease.' + '\x1b[0m')
     print("train cost = ", costs[epochs])
     print("valid cost = ", valid_costs[epochs])
-    plot_results(costs, valid_costs, epochs)
+
+
+def prediction(net):
+    i = 0
+    while i < net.train_size:
+        if i < net.valid_size:
+            forward_pro(net, net.valid_x[i], train=False)
+        forward_pro(net, net.x[i])
+        i += 1
 
 
 class gradient_descent:
-    def __init__(self, net, args, optimization='normal', batched=False):
+
+    def normal(self, net, derivate):
+        t = 0
+        while t < net.size-1:
+            net.thetas[t] = net.thetas[t] - self.args.learning_rate * derivate[t]
+            t += 1
+        return net.thetas
+
+    def rmsprop(self, net, derivate):
+        t = 0
+        while t < net.size - 1:
+            self.cache[t] = self.decay_rate * self.cache[t] + (1 - self.decay_rate) * derivate[t]**2
+            net.thetas[t] = net.thetas[t] - self.args.learning_rate * derivate[t] / (np.sqrt(self.cache[t]) + self.eps)
+            t += 1
+        return net.thetas
+
+    def adagrad(self, net, derivate):
+        t = 0
+        while t < net.size - 1:
+            self.cache[t] += derivate[t]**2
+            net.thetas[t] = net.thetas[t] - self.args.learning_rate * derivate[t] / (np.sqrt(self.cache[t]) + self.eps)
+            t += 1
+        return net.thetas
+
+    def adam(self, net, derivate):
+        t = 0
+        while t < net.size - 1:
+            self.m[t] = self.beta1 * self.m[t] + (1 - self.beta1) * derivate[t]
+            self.v[t] = self.beta2 * self.v[t] + (1 - self.beta2) * (derivate[t]**2)
+            net.thetas[t] = net.thetas[t] - self.args.learning_rate * self.m[t] / (np.sqrt(self.v[t]) + self.eps)
+            t += 1
+        return net.thetas
+
+    def nesterov(self, net, derivate):
+        t = 0
+        cache = copy.deepcopy(net.velocity)
+        while t < net.size - 1:
+            net.velocity[t] = net.momentum * net.velocity[t] - self.args.learning_rate * derivate[t]
+            net.thetas[t] = net.thetas[t] - net.momentum * cache[t] + ((1 + net.momentum) * net.velocity[t])
+            t += 1
+        return net.thetas
+
+    optimizations = {
+            'normal': normal,
+            'nesterov': nesterov,
+            'adagrad': adagrad,
+            'adam': adam,
+            'rmsprop': rmsprop,
+    }
+
+    def __init__(self, net, args, optimization='normal', batched=0):
         self.net = net
         self.args = args
-        self.optimization = optimization
+        self.batch_size = batched
+        self.epochs = args.epochs
+        self.lr = args.learning_rate
+        self.optimization = gradient_descent.optimizations[optimization]
         self.n_batch = None
+        self.opt = optimization
         if optimization == 'rmsprop' or optimization == 'adagrad':
             self.decay_rate = 0.9
             self.eps = 0.00001
@@ -233,329 +284,150 @@ class gradient_descent:
             self.beta2 = 0.999
             self.m = copy.deepcopy(net.deltas)
             self.v = copy.deepcopy(net.deltas)
-        if batched:
-            self.n_batch = len(net.batched_x)
 
     def perform(self):
-        if self.n_batch:
-            self.stochastic_gradient_descent()
+        if self.batch_size:
+            self.net.split(self.args.batch_size)
+            self.n_batch = len(self.net.batched_x)
+            if not self.args.early_stopping:
+                self.stochastic_gd()
+            else:
+                self.stochastic_es_gd()
         else:
-            self.normal_gradient_descent()
+            if not self.args.early_stopping:
+                self.normal_gd()
+            else:
+                self.normal_es_gd()
 
-    def normal_gradient_descent(self):
+    def normal_gd(self):
         self.costs = []
         self.valid_costs = []
-        non_stop = 1
-        i = 0
-        epochs = self.args.epochs
-        net = copy.deepcopy(self.net)
-        learning_rate = self.args.learning_rate
+        e = 0
         start = timeit.default_timer()
-        while i < epochs:
-            derivate = backward_pro(net)
-            add_cost(net, self.costs, self.valid_costs)
-            # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-            if self.args.early_stopping and net.early_stopping(self.valid_costs, i):
-                non_stop = 0
-                break
-            net.predict.clear()
-            net.valid_predict.clear()
-            j = 0
-            while j < net.size-1:
-                net.thetas[j] = net.thetas[j] - learning_rate * derivate[j]
-                j += 1
-            i += 1
-        if non_stop:
-            c = 0
-            while c < net.train_size:
-                if c < net.valid_size:
-                    forward_pro(net, net.valid_x[c], train=False)
-                forward_pro(net, net.x[c])
-                c += 1
-            add_cost(net, self.costs, self.valid_costs)
-            # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
+        while e < self.epochs:
+            derivate = backward_pro(self.net)
+            self.add_cost(e)
+            self.net.predict.clear()
+            self.net.valid_predict.clear()
+            self.net.thetas = self.optimization(self, self.net, derivate)
+            e += 1
+        prediction(self.net)
+        self.add_cost(e)
         stop = timeit.default_timer()
         print('Time Gradient: ', stop - start)
-        #display_softmax(np.asarray(net.valid_predict), net.valid_y)
-        if non_stop:
-            display_results(self.costs, self.valid_costs, epochs)
-        else:
-            display_results(self.costs, self.valid_costs, net.early_stop_index + 1)
+        display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
+        display_results(self.costs, self.valid_costs, self.epochs)
 
+    def stochastic_gd(self):
+        self.costs = []
+        self.valid_costs = []
+        e = 0
+        start = timeit.default_timer()
+        prediction(self.net)
+        self.add_cost(e)
+        self.net.predict.clear()
+        self.net.valid_predict.clear()
+        while e < self.epochs:
+            b = 0
+            while b < self.n_batch:
+                derivate = backward_pro_sto(self.net, self.net.batched_x[b], self.net.batched_vec_y[b])
+                self.net.thetas = self.optimization(self, self.net, derivate)
+                b += 1
+            prediction(self.net)
+            self.add_cost(e)
+            if e < self.epochs-1:
+                self.net.predict.clear()
+                self.net.valid_predict.clear()
+            e += 1
+        # verif last add cost
+        stop = timeit.default_timer()
+        print('Time Gradient: ', stop - start)
+        display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
+        display_results(self.costs, self.valid_costs, self.epochs)
 
-# def gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80, early_stop=False):
-#     start = timeit.default_timer()
-#     costs = []
-#     valid_costs = []
-#     non_stop = 1
-#     i = 0
-#     while i < epochs:
-#         derivate = backward_pro(net)
-#         add_cost(net, costs, valid_costs)
-#         # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-#         if early_stop and net.early_stopping(valid_costs, i):
-#             non_stop = 0
-#             break
-#         net.predict.clear()
-#         net.valid_predict.clear()
-#         j = 0
-#         while j < net.size-1:
-#             net.thetas[j] = net.thetas[j] - learning_rate * derivate[j]
-#             j += 1
-#         i += 1
-#     if non_stop:
-#         c = 0
-#         while c < net.train_size:
-#             if c < net.valid_size:
-#                 forward_pro(net, net.valid_x[c], train=False)
-#             forward_pro(net, net.x[c])
-#             c += 1
-#         add_cost(net, costs, valid_costs)
-#         # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-#     print(net.thetas[2])
-#     stop = timeit.default_timer()
-#     print('Time Gradient: ', stop - start)
-#     #display_softmax(np.asarray(net.valid_predict), net.valid_y)
-#     if non_stop:
-#         display_results(costs, valid_costs, epochs)
-#     else:
-#         display_results(costs, valid_costs, net.early_stop_index + 1)
-#     return 1
+    def normal_es_gd(self):
+        self.costs = []
+        self.valid_costs = []
+        early_stop = 0
+        e = 0
+        epochs = self.args.epochs
+        start = timeit.default_timer()
+        while e < epochs:
+            derivate = backward_pro(self.net)
+            self.add_cost(e)
+            if self.net.early_stopping(self.valid_costs, e):
+                early_stop = 1
+                break
+            self.net.predict.clear()
+            self.net.valid_predict.clear()
+            self.net.thetas = self.optimization(self, self.net, derivate)
+            e += 1
+        if not early_stop:
+            prediction(self.net)
+            self.add_cost(e)
+        stop = timeit.default_timer()
+        print('Time Gradient: ', stop - start)
+        display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
+        if early_stop:
+            self.epochs = self.net.early_stop_index + 1
+        display_results(self.costs, self.valid_costs, self.epochs)
 
+    def stochastic_es_gd(self):
+        self.costs = []
+        self.valid_costs = []
+        early_stop = 0
+        e = 0
+        epochs = self.args.epochs
+        start = timeit.default_timer()
+        prediction(self.net)
+        self.add_cost(e)
+        self.net.predict.clear()
+        self.net.valid_predict.clear()
+        while e < epochs:
+            b = 0
+            while b < self.n_batch:
+                derivate = backward_pro_sto(self.net, self.net.batched_x[b], self.net.batched_vec_y[b])
+                self.net.thetas = self.optimization(self, self.net, derivate)
+                b += 1
+            prediction(self.net)
+            self.add_cost(e)
+            if self.net.early_stopping(self.valid_costs, e):
+                early_stop = 1
+                break
+            if e < epochs-1:
+                self.net.predict.clear()
+                self.net.valid_predict.clear()
+            e += 1
+        # verif last add cost
+        stop = timeit.default_timer()
+        print('Time Gradient: ', stop - start)
+        display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
+        if early_stop:
+            self.epochs = self.net.early_stop_index + 1
+        display_results(self.costs, self.valid_costs, self.epochs)
 
-def gradient_descent_rms(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80, early_stop=False):
-    start = timeit.default_timer()
-    costs = []
-    valid_costs = []
-    non_stop = 1
-    i = 0
-    decay_rate = 0.9
-    eps = 0.00001
-    cache = copy.deepcopy(net.deltas)
-    while i < epochs:
-        derivate = backward_pro(net)
-        add_cost(net, costs, valid_costs)
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-        if early_stop and net.early_stopping(valid_costs, i):
-            non_stop = 0
-            break
-        net.predict.clear()
-        net.valid_predict.clear()
-        j = 0
-        while j < net.size - 1:
-            cache[j] = decay_rate * cache[j] + (1 - decay_rate) * derivate[j]**2
-            net.thetas[j] = net.thetas[j] - learning_rate * derivate[j] / (np.sqrt(cache[j]) + eps)
-            j += 1
-        i += 1
-    if non_stop:
-        c = 0
-        while c < net.train_size:
-            if c < net.valid_size:
-                forward_pro(net, net.valid_x[c], train=False)
-            forward_pro(net, net.x[c])
-            c += 1
-        add_cost(net, costs, valid_costs)
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-    stop = timeit.default_timer()
-    print('Time to perform RMSprop Gradient: ', stop - start)
-    #display_softmax(np.asarray(net.valid_predict), net.valid_y)
-    if non_stop:
-        display_results(costs, valid_costs, epochs)
-    else:
-        display_results(costs, valid_costs, net.early_stop_index + 1)
-    return 1
+    def add_cost(self, e):
+        new_cost = binary_cross_entropy(np.asarray(self.net.predict), self.net.vec_y, self.net.lmbd, self.net)
+        new_valid_cost = binary_cross_entropy(
+                np.asarray(self.net.valid_predict), self.net.valid_vec_y, 0, self.net)
+        self.costs.append(new_cost)
+        self.valid_costs.append(new_valid_cost)
+        #print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e]))
 
-
-def gradient_descent_adg(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80, early_stop=False):
-    start = timeit.default_timer()
-    costs = []
-    valid_costs = []
-    non_stop = 1
-    i = 0
-    eps = 0.00001
-    cache = copy.deepcopy(net.deltas)
-    while i < epochs:
-        derivate = backward_pro(net)
-        add_cost(net, costs, valid_costs)
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-        if early_stop and net.early_stopping(valid_costs, i):
-            non_stop = 0
-            break
-        net.predict.clear()
-        net.valid_predict.clear()
-        j = 0
-        while j < net.size - 1:
-            cache[j] += derivate[j]**2
-            net.thetas[j] = net.thetas[j] - learning_rate * derivate[j] / (np.sqrt(cache[j]) + eps)
-            j += 1
-        i += 1
-    if non_stop:
-        c = 0
-        while c < net.train_size:
-            if c < net.valid_size:
-                forward_pro(net, net.valid_x[c], train=False)
-            forward_pro(net, net.x[c])
-            c += 1
-        add_cost(net, costs, valid_costs)
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-    stop = timeit.default_timer()
-    print('Time Gradient: ', stop - start)
-    #display_softmax(np.asarray(net.valid_predict), net.valid_y)
-    if non_stop:
-        display_results(costs, valid_costs, epochs)
-    else:
-        display_results(costs, valid_costs, net.early_stop_index + 1)
-    return 1
-
-
-def gradient_descent_adam(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80, early_stop=False):
-    start = timeit.default_timer()
-    costs = []
-    valid_costs = []
-    non_stop = 1
-    i = 0
-    eps = 0.00000001
-    beta1 = 0.9
-    beta2 = 0.999
-    m = copy.deepcopy(net.deltas)
-    v = copy.deepcopy(net.deltas)
-    while i < epochs:
-        derivate = backward_pro(net)
-        add_cost(net, costs, valid_costs)
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i+1, epochs, costs[i], valid_costs[i]))
-        if early_stop and net.early_stopping(valid_costs, i):
-            non_stop = 0
-            break
-        net.predict.clear()
-        net.valid_predict.clear()
-        j = 0
-        while j < net.size - 1:
-            m[j] = beta1 * m[j] + (1 - beta1) * derivate[j]
-            v[j] = beta2 * v[j] + (1 - beta2) * (derivate[j]**2)
-            net.thetas[j] = net.thetas[j] - learning_rate * m[j] / (np.sqrt(v[j]) + eps)
-            j += 1
-        i += 1
-    if non_stop:
-        c = 0
-        while c < net.train_size:
-            if c < net.valid_size:
-                forward_pro(net, net.valid_x[c], train=False)
-            forward_pro(net, net.x[c])
-            c += 1
-        add_cost(net, costs, valid_costs)
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-    stop = timeit.default_timer()
-    print('Time Gradient: ', stop - start)
-    #display_softmax(np.asarray(net.valid_predict), net.valid_y)
-    if non_stop:
-        display_results(costs, valid_costs, epochs)
-    else:
-        display_results(costs, valid_costs, net.early_stop_index + 1)
-    return 1
-
-
-def gradient_descent_nes(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80, early_stop=False):
-    costs = []
-    valid_costs = []
-    non_stop = 1
-    i = 0
-    start = timeit.default_timer()
-    while i < epochs:
-        #derivate = backward_pro(net)
-        derivate = backward_pro_nes(net)
-        add_cost(net, costs, valid_costs)
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i+1, epochs, costs[i], valid_costs[i]))
-        if early_stop and net.early_stopping(valid_costs, i):
-            non_stop = 0
-            break
-        net.predict.clear()
-        net.valid_predict.clear()
-        j = 0
-        #test = copy.deepcopy(net.velocity) # a enlever
-        while j < net.size - 1:
-            net.velocity[j] = net.momentum * net.velocity[j] - learning_rate * derivate[j]
-            #net.thetas[j] = net.thetas[j] - net.momentum * test[j] + ((1 + net.momentum) * net.velocity[j])
-            net.thetas[j] = net.thetas[j] + net.velocity[j]
-            j += 1
-        i += 1
-    if non_stop:
-        c = 0
-        while c < net.train_size:
-            if c < net.valid_size:
-                forward_pro(net, net.valid_x[c], train=False)
-            forward_pro(net, net.x[c])
-            c += 1
-        add_cost(net, costs, valid_costs)
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(i, epochs, costs[i], valid_costs[i]))
-    stop = timeit.default_timer()
-    print('Time to perform Nesterov Accelerated Momentum Gradient: ', stop - start)
-    #display_softmax(np.asarray(net.valid_predict), net.valid_y)
-    if non_stop:
-        display_results(costs, valid_costs, epochs)
-    else:
-        display_results(costs, valid_costs, net.early_stop_index + 1)
-    return 1
-
-
-def stochastic_gradient_descent(net, loss='cross_entropy', learning_rate=1.0, batch_size=0, epochs=80, early_stop=False):
-    costs = []
-    valid_costs = []
-    non_stop = 1
-    n_batch = len(net.batched_x)
-    e = 0
-    start = timeit.default_timer()
-    c = 0
-    while c < net.train_size:
-        if c < net.valid_size:
-            forward_pro(net, net.valid_x[c], train=False)
-        forward_pro(net, net.x[c])
-        c += 1
-    add_cost(net, costs, valid_costs)
-    net.predict.clear()
-    net.valid_predict.clear()
-    # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, epochs, costs[e], valid_costs[e]))
-    while e < epochs:
-        b = 0
-        while b < n_batch:
-            derivate = backward_pro_sto(net, net.batched_x[b], net.batched_vec_y[b])
-            j = 0
-            while j < net.size - 1:
-                net.thetas[j] = net.thetas[j] - learning_rate * derivate[j]
-                j += 1
-            b += 1
-        c = 0
-        while c < net.train_size:
-            if c < net.valid_size:
-                forward_pro(net, net.valid_x[c], train=False)
-            forward_pro(net, net.x[c])
-            c += 1
-        add_cost(net, costs, valid_costs)
-        if early_stop and net.early_stopping(valid_costs, e):
-            non_stop = 0
-            break
-        # print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e+1, epochs, costs[e+1], valid_costs[e+1]))
-        if e < epochs-1:
-            net.predict.clear()
-            net.valid_predict.clear()
-        e += 1
-    # if non_stop:
-    #     c = 0
-    #     while c < net.train_size:
-    #         if c < net.valid_size:
-    #             forward_pro(net, net.valid_x[c], train=False)
-    #         forward_pro(net, net.x[c])
-    #         c += 1
-    #     add_cost(net, costs, valid_costs)
-    #     print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, epochs, costs[e], valid_costs[e]))
-    print(net.thetas[2])
-    stop = timeit.default_timer()
-    print('Time Stochastic Gradient: ', stop - start)
-    #display_softmax(np.asarray(net.valid_predict), net.valid_y)
-    if non_stop:
-        display_results(costs, valid_costs, epochs)
-    else:
-        display_results(costs, valid_costs, net.early_stop_index + 1)
-    return 1
+    def plot_results(self):
+        title = self.opt
+        if self.batch_size:
+            title = title + " Batched ({})".format(self.batch_size)
+        plt.xlabel('No. of epochs')
+        plt.ylabel('Cost Function')
+        plt.title("Cost Function Evolution")
+        p = plt.plot(
+                np.arange(self.epochs+1),
+                self.costs[:self.epochs+1], alpha=0.5, label=title + ' Train')
+        plt.plot(
+                np.arange(self.epochs+1),
+                self.valid_costs[:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
+        plt.legend()
 
 
 def theta_init(layer_1, layer_2, seed=0, eps=0.5):
@@ -564,16 +436,12 @@ def theta_init(layer_1, layer_2, seed=0, eps=0.5):
 
 
 def forward_pro(net, row, train=True):
-    activ_dict = {
-            'sigmoid': sigmoid,
-            'softmax': softmax,
-    }
     i = 0
     a = [row.reshape(-1, 1)]
     b = np.array([[1.0]]).reshape(1, 1)
     while i < net.size - 1:
         a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(activ_dict[net.layers[i+1].activation](
+        a.append(net.layers[i+1].activation(
             net.thetas[i].dot(a[i])))
         i += 1
     if train:
@@ -584,44 +452,15 @@ def forward_pro(net, row, train=True):
 
 
 def forward_pro_sto(net, row):
-    activ_dict = {
-            'sigmoid': sigmoid,
-            'softmax': softmax,
-    }
     i = 0
     a = [row.reshape(-1, 1)]
     b = np.array([[1.0]]).reshape(1, 1)
     while i < net.size - 1:
         a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(activ_dict[net.layers[i+1].activation](
+        a.append(net.layers[i+1].activation(
             net.thetas[i].dot(a[i])))
         i += 1
     return a
-
-
-def forward_pro_nes(net, row, train=True):
-    activ_dict = {
-            'sigmoid': sigmoid,
-            'softmax': softmax,
-    }
-    i = 0
-    a = [row.reshape(-1, 1)]
-    a_nes = [row.reshape(-1, 1)]
-    b = np.array([[1.0]]).reshape(1, 1)
-    while i < net.size - 1:
-        a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(activ_dict[net.layers[i+1].activation](
-            net.thetas[i].dot(a[i])))
-        if train:
-            a_nes[i] = np.concatenate((b, a_nes[i]), axis=0)
-            a_nes.append(activ_dict[net.layers[i+1].activation](
-                (net.thetas[i] + (net.momentum * net.velocity[i])).dot(a_nes[i])))
-        i += 1
-    if train:
-        net.predict.append(a[i])
-    else:
-        net.valid_predict.append(a[i])
-    return a_nes
 
 
 def backward_pro(net):
@@ -650,37 +489,6 @@ def backward_pro(net):
         else:
             derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i]) # can add to the lasts column direct ? init derivate as np array ?
             derivate[i][:, 0] -= (total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
-            derivate[i] /= net.train_size
-        i += 1
-    return derivate
-
-
-def backward_pro_nes(net):
-    i = 0
-    delta = [0] * (net.size)
-    total_delta = copy.deepcopy(net.deltas)
-    derivate = [0] * (net.size - 1)
-    while i < net.train_size:
-        if i < net.valid_size:
-            forward_pro_nes(net, net.valid_x[i], train=False)
-        a = forward_pro_nes(net, net.x[i])
-        j = net.size - 1
-        delta[j] = a[j] - net.vec_y[i].reshape(-1, 1)
-        j -= 1
-        while j > 0:
-            delta[j] = (net.thetas[j] + (net.momentum * net.velocity[j])).T.dot(delta[j + 1]) * a[j] * (1 - a[j])
-            total_delta[j] += delta[j + 1] * a[j].T
-            delta[j] = delta[j][1:, :]
-            j -= 1
-        total_delta[j] += delta[j + 1] * a[j].T
-        i += 1
-    i = 0
-    while i < net.size - 1:
-        if not net.lmbd:
-            derivate[i] = total_delta[i] / net.train_size
-        else:
-            derivate[i] = total_delta[i] + net.lmbd * (net.thetas[i] + (net.momentum * net.velocity[i])) # can add to the lasts column direct ? init derivate as np array ?
-            derivate[i][:, 0] -= total_delta[i][:, 0] + (net.lmbd * (net.thetas[i][:, 0] + (net.momentum * net.velocity[i][:, 0])))
             derivate[i] /= net.train_size
         i += 1
     return derivate
@@ -716,23 +524,6 @@ def backward_pro_sto(net, x, vec_y):
     return derivate
 
 
-def sigmoid(z):
-    return 1 / (1 + np.exp(-1 * z))
-
-
-def softmax(z):
-    # results = []
-    # i = 0
-    # describe(n_class)
-    # z = z.reshape(-1, 2)
-    # wzile i < n_class:
-    #     results.append(np.exp(-1 * z[:, i]) / (np.sum(np.exp(-1 * z))))
-    #     i += 1
-    # return results
-    #z = z.reshape(-1, 2)
-    return np.exp(z) / (np.sum(np.exp(z), axis=0)[:, None])
-
-
 def display_softmax(p, y):
     y_predict = p.argmax(axis=1)
     i = 0
@@ -753,7 +544,6 @@ def display_softmax(p, y):
 def binary_cross_entropy(predict, y_class, lmbd, net):
     size = np.size(predict, 0)
     predict = predict.reshape(-1, 2)
-    # to do : add counter of class for modularity
     regularization = 0
     if lmbd:
         i = 0
@@ -762,9 +552,6 @@ def binary_cross_entropy(predict, y_class, lmbd, net):
             thetas_sum += np.sum(net.thetas[i] ** 2)
             i += 1
         regularization = lmbd / (2 * size) * thetas_sum
-    # y_0 = (-1 * y_class[:, 0].T.dot((np.log(predict[:, 0]))) - (1 - y_class[:, 0]).T.dot((np.log(1 - predict[:, 0]))))
-    # y_1 = (-1 * y_class[:, 1].T.dot((np.log(predict[:, 1]))) - (1 - y_class[:, 1]).T.dot((np.log(1 - predict[:, 1]))))
-    # return (1 / size) * (y_0 + y_1) + regularization
     return ((1 / size)
             * (-1 * y_class[:, 0].dot((np.log(predict[:, 0])))
                 - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0]))))) + regularization
@@ -773,8 +560,7 @@ def binary_cross_entropy(predict, y_class, lmbd, net):
 def cross_entropy(predict, y_class, lmbd, net):
     Y = []
     size = np.size(predict, 0)
-    predict = predict.reshape(-1, 2)
-    # to do : add counter of class for modularity
+    predict = predict.reshape(-1, net.n_class)
     regularization = 0
     if lmbd:
         i = 0
@@ -902,8 +688,15 @@ def main():
     # else:
     #     net.split(args.batch_size)
     #     stochastic_gradient_descent(net, learning_rate=args.learning_rate, batch_size=args.batch_size, epochs=args.epochs)
-    gd = gradient_descent(net, args)
-    gd.perform()
+    gd = []
+    for opt in args.optimizations:
+        gd.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=args.batch_size))
+        if args.batch_size and args.no_batch_too:
+            gd.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=0))
+    for g in gd:
+        g.perform()
+        g.plot_results()
+    plt.show()
     stop = timeit.default_timer()
     print('Time Global: ', stop - start)
 
