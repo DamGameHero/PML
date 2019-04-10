@@ -415,7 +415,7 @@ class gradient_descent:
         #print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e]))
 
     def plot_results(self):
-        title = self.opt
+        title = self.opt.upper()
         if self.batch_size:
             title = title + " Batched ({})".format(self.batch_size)
         plt.xlabel('No. of epochs')
@@ -531,14 +531,42 @@ def display_softmax(p, y):
     size = len(y)
     ok = "\x1b[1;32;40m"
     no = "\x1b[1;31;40m"
+    true_positive = 0
+    false_positive = 0
+    true_negative = 0
+    false_negative = 0
+    pos = 0
+    neg = 0
     while i < size:
         if y[i] == y_predict[i]:
+            if y[i] == 1:
+                true_positive += 1
+                pos += 1
+            else:
+                true_negative += 1
+                neg += 1
             good += 1
             print(ok + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         else:
+            if y[i] == 1:
+                false_negative += 1
+                pos += 1
+            else:
+                false_positive += 1
+                neg += 1
             print(no + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         i += 1
+    precision = float(true_positive/(true_positive + false_positive))
+    recall = float(true_positive/(true_positive + false_negative))
+    f_score = 2 * (precision * recall/(precision + recall))
     print("Correctly Predicted : {}/{}".format(good, size))
+    print(ok + "True Positive : {}/{}".format(true_positive, pos) + "\x1b[0m")
+    print(ok + "True Negative : {}/{}".format(true_negative, neg) + "\x1b[0m")
+    print(no + "False Positive : {}/{}".format(false_positive, neg) + "\x1b[0m")
+    print(no + "False Negative : {}/{}".format(false_negative, pos) + "\x1b[0m")
+    print("Precision = ", precision)
+    print("Recall = ", recall)
+    print("F Score = ", f_score)
 
 
 def binary_cross_entropy(predict, y_class, lmbd, net):
@@ -675,19 +703,6 @@ def main():
         dfs[0] = dfs[0][(np.abs((df_tmp.select_dtypes(include='number'))) < args.outliers).all(axis=1)]
     layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
     net = network(layers, dfs[0], dfs[1], args)
-    # if args.nesterov:
-    #     gradient_descent_nes(net, learning_rate=args.learning_rate, epochs=args.epochs)
-    # elif args.rmsprop:
-    #     gradient_descent_rms(net, learning_rate=args.learning_rate, epochs=args.epochs)
-    # elif args.adagrad:
-    #     gradient_descent_adg(net, learning_rate=args.learning_rate, epochs=args.epochs)
-    # elif args.adam:
-    #     gradient_descent_adam(net, learning_rate=args.learning_rate, epochs=args.epochs)
-    # elif not args.batch_size:
-    #     gradient_descent(net, learning_rate=args.learning_rate, epochs=args.epochs, early_stop=args.early_stopping)
-    # else:
-    #     net.split(args.batch_size)
-    #     stochastic_gradient_descent(net, learning_rate=args.learning_rate, batch_size=args.batch_size, epochs=args.epochs)
     gd = []
     for opt in args.optimizations:
         gd.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=args.batch_size))
