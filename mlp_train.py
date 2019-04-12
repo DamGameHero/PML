@@ -5,10 +5,11 @@ import inspect
 import re
 import math
 import matplotlib.pyplot as plt
-from scipy import stats as astats
 import copy
 import timeit
 import argparse
+import logging
+from datetime import datetime
 
 
 def describe(arg):
@@ -201,15 +202,15 @@ class network:
 
 def display_results(costs, valid_costs, epochs):
     if all(costs[i] >= costs[i+1] for i in range(epochs-1)):
-        print('\x1b[1;32;40m' + 'Train : Cost always decrease.' + '\x1b[0m')
+        logging.info('\x1b[1;32;40m' + 'Train : Cost always decrease.' + '\x1b[0m')
     else:
-        print('\x1b[1;31;40m' + 'Train : Cost don\'t always decrease (Try smaller Learning Rate ?).' + '\x1b[0m')
+        logging.info('\x1b[1;31;40m' + 'Train : Cost don\'t always decrease (Try smaller Learning Rate ?).' + '\x1b[0m')
     if all(valid_costs[i] >= valid_costs[i+1] for i in range(epochs-1)):
-        print('\x1b[1;32;40m' + 'Valid : Cost always decrease.' + '\x1b[0m')
+        logging.info('\x1b[1;32;40m' + 'Valid : Cost always decrease.' + '\x1b[0m')
     else:
-        print('\x1b[1;31;40m' + 'Valid : Cost don\'t always decrease.' + '\x1b[0m')
-    print("train cost = ", costs[epochs])
-    print("valid cost = ", valid_costs[epochs])
+        logging.info('\x1b[1;31;40m' + 'Valid : Cost don\'t always decrease.' + '\x1b[0m')
+    logging.info("train cost = {}".format(costs[epochs]))
+    logging.info("valid cost = {}".format(valid_costs[epochs]))
 
 
 def prediction(net):
@@ -281,11 +282,11 @@ class gradient_descent:
         self.optimization = gradient_descent.optimizations[optimization]
         self.n_batch = None
         self.opt = optimization
-        self.valid_metrics = {'good': []}
+        self.valid_metrics = {'correct': []}
         self.valid_metrics['precision'] = []
         self.valid_metrics['recall'] = []
         self.valid_metrics['f_score'] = []
-        self.metrics = {'good': []}
+        self.metrics = {'correct': []}
         self.metrics['precision'] = []
         self.metrics['recall'] = []
         self.metrics['f_score'] = []
@@ -301,6 +302,18 @@ class gradient_descent:
             self.v = copy.deepcopy(net.deltas)
 
     def perform(self):
+        if self.opt == 'rmsprop' or self.opt == 'adagrad':
+            logging.info("\x1b[1;33;40m{} Type: {} | layers: {} | units: {} | learning rate : {} | epochs {} | batch size: {} | lambda: {} | early stop: {} | patience: {} | epsilon {} | decay rate {}\x1b[0m".format(
+                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt, self.args.layers, self.args.units, self.lr, self.epochs, self.batch_size, self.net.lmbd, self.args.early_stopping, self.args.patience, self.eps, self.decay_rate))
+        elif self.opt == 'adam':
+            logging.info("\x1b[1;33;40m{} Type: {} | layers: {} | units: {} | learning rate : {} | epochs {} | batch size: {} | lambda: {} | early stop: {} | patience: {} | epsilon {} | beta 1 {} | beta 2 {}\x1b[0m".format(
+                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt, self.args.layers, self.args.units, self.lr, self.epochs, self.batch_size, self.net.lmbd, self.args.early_stopping, self.args.patience, self.eps, self.beta1, self.beta2))
+        elif self.opt == 'nesterov':
+            logging.info("\x1b[1;33;40m{} Type: {} | layers: {} | units: {} | learning rate : {} | epochs {} | batch size: {} | lambda: {} | early stop: {} | patience: {} | momentum: {}\x1b[0m".format(
+                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt, self.args.layers, self.args.units, self.lr, self.epochs, self.batch_size, self.net.lmbd, self.args.early_stopping, self.args.patience, self.args.momentum))
+        else:
+            logging.info("\x1b[1;33;40m{} Type: {} | layers: {} | units: {} | learning rate : {} | epochs {} | batch size: {} | lambda: {} | early stop: {} | patience: {}\x1b[0m".format(
+                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt, self.args.layers, self.args.units, self.lr, self.epochs, self.batch_size, self.net.lmbd, self.args.early_stopping, self.args.patience))
         if self.batch_size:
             self.net.split(self.args.batch_size)
             self.n_batch = len(self.net.batched_x)
@@ -329,7 +342,7 @@ class gradient_descent:
         prediction(self.net)
         self.add_cost(e)
         stop = timeit.default_timer()
-        print('Time Gradient: ', stop - start)
+        logging.info('Time Gradient: {}'.format(stop - start))
         display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
         display_results(self.costs, self.valid_costs, self.epochs)
 
@@ -356,9 +369,8 @@ class gradient_descent:
             e += 1
         # verif last add cost
         stop = timeit.default_timer()
-        print('Time Gradient: ', stop - start)
+        logging.info('Time Gradient: {}'.format(stop - start))
         display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
-        print("epochs = ", self.epochs)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def normal_es_gd(self):
@@ -383,10 +395,9 @@ class gradient_descent:
             self.add_cost(e)
             self.net.early_stopping(self.valid_costs, e)
         stop = timeit.default_timer()
-        print('Time Gradient: ', stop - start)
+        logging.info('Time Gradient: {}'.format(stop - start))
         self.epochs = self.net.early_stop_index
         display_softmax(np.asarray(self.net.best_predict), self.net.valid_y)
-        print("epochs = ", self.epochs)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def stochastic_es_gd(self):
@@ -415,10 +426,9 @@ class gradient_descent:
             e += 1
         # verif last add cost
         stop = timeit.default_timer()
-        print('Time Gradient: ', stop - start)
-        self.epochs = self.net.early_stop_index + 1
+        logging.info('Time Gradient: {}'.format(stop - start))
+        self.epochs = self.net.early_stop_index
         display_softmax(np.asarray(self.net.best_predict), self.net.valid_y)
-        print("epochs = ", self.epochs)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def add_cost(self, e):
@@ -428,11 +438,11 @@ class gradient_descent:
         self.costs.append(new_cost)
         self.valid_costs.append(new_valid_cost)
         if not self.args.bonus_metrics:
-            print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e]))
+            logging.info('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e]))
         else:
             self.add_metrics(np.asarray(self.net.predict), self.net.y)
             self.add_metrics(np.asarray(self.net.valid_predict), self.net.valid_y, valid=True)
-            print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f} | correct: {}/{} - val_correct: {}/{} | pre: {:.4f} - val_pre: {:.4f} | recall: {:.4f} - val_recall: {:.4f} | fscore: {:.4f} - val_fscore: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e], self.metrics['good'][e], self.net.train_size, self.valid_metrics['good'][e], self.net.valid_size, self.metrics['precision'][e], self.valid_metrics['precision'][e], self.metrics['recall'][e], self.valid_metrics['recall'][e], self.metrics['f_score'][e], self.valid_metrics['f_score'][e]))
+            logging.info('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f} | correct: {:.4f} % - val_correct: {:.4f} % | pre: {:.4f} - val_pre: {:.4f} | recall: {:.4f} - val_recall: {:.4f} | fscore: {:.4f} - val_fscore: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e], self.metrics['correct'][e], self.valid_metrics['correct'][e], self.metrics['precision'][e], self.valid_metrics['precision'][e], self.metrics['recall'][e], self.valid_metrics['recall'][e], self.metrics['f_score'][e], self.valid_metrics['f_score'][e]))
 
     def add_metrics(self, p, y, valid=False):
         y_predict = p.argmax(axis=1)
@@ -471,22 +481,41 @@ class gradient_descent:
             f_score = 2 * (precision * recall/(precision + recall))
         except Exception:
             f_score = 0
+        try:
+            good = float(good)/float(size) * 100
+        except Exception:
+            good = 0
         if valid:
-            self.valid_metrics['good'].append(good)
+            self.valid_metrics['correct'].append(good)
             self.valid_metrics['precision'].append(precision)
             self.valid_metrics['recall'].append(recall)
             self.valid_metrics['f_score'].append(f_score)
         else:
-            self.metrics['good'].append(good)
+            self.metrics['correct'].append(good)
             self.metrics['precision'].append(precision)
             self.metrics['recall'].append(recall)
             self.metrics['f_score'].append(f_score)
 
     def plot_results(self):
         title = self.opt.upper()
+        i = 1
         if self.batch_size:
             title = title + " Batched ({})".format(self.batch_size)
-        plt.figure(1)
+        if self.args.bonus_metrics:
+            for metric, l in self.metrics.items():
+                plt.figure(i)
+                plt.xlabel('No. of epochs')
+                plt.ylabel(metric)
+                plt.title(metric.capitalize() + " Evolution")
+                p = plt.plot(
+                        np.arange(self.epochs+1),
+                        l[:self.epochs+1], alpha=0.5, label=title + ' Train')
+                plt.plot(
+                        np.arange(self.epochs+1),
+                        self.valid_metrics[metric][:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
+                plt.legend()
+                i += 1
+        plt.figure(i)
         plt.xlabel('No. of epochs')
         plt.ylabel('Cost Function')
         plt.title("Cost Function Evolution")
@@ -497,40 +526,6 @@ class gradient_descent:
                 np.arange(self.epochs+1),
                 self.valid_costs[:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
         plt.legend()
-        if self.args.bonus_metrics:
-            plt.figure(2)
-            plt.xlabel('No. of epochs')
-            plt.ylabel('Precision')
-            plt.title("Precision Evolution")
-            p = plt.plot(
-                    np.arange(self.epochs+1),
-                    self.metrics['precision'][:self.epochs+1], alpha=0.5, label=title + ' Train')
-            plt.plot(
-                    np.arange(self.epochs+1),
-                    self.valid_metrics['precision'][:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
-            plt.legend()
-            plt.figure(3)
-            plt.xlabel('No. of epochs')
-            plt.ylabel('Recall')
-            plt.title("Recall Evolution")
-            p = plt.plot(
-                    np.arange(self.epochs+1),
-                    self.metrics['recall'][:self.epochs+1], alpha=0.5, label=title + ' Train')
-            plt.plot(
-                    np.arange(self.epochs+1),
-                    self.valid_metrics['recall'][:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
-            plt.legend()
-            plt.figure(4)
-            plt.xlabel('No. of epochs')
-            plt.ylabel('F Score')
-            plt.title("F Score Evolution")
-            p = plt.plot(
-                    np.arange(self.epochs+1),
-                    self.metrics['f_score'][:self.epochs+1], alpha=0.5, label=title + ' Train')
-            plt.plot(
-                    np.arange(self.epochs+1),
-                    self.valid_metrics['f_score'][:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
-            plt.legend()
 
 
 def theta_init(layer_1, layer_2, seed=0, eps=0.5):
@@ -674,14 +669,14 @@ def display_softmax(p, y):
     except Exception as e:
         f_score = 0
         print(e.__doc__)
-    print("Correctly Predicted : {}/{}".format(good, size))
-    print(ok + "True Positive : {}/{}".format(true_positive, pos) + "\x1b[0m")
-    print(ok + "True Negative : {}/{}".format(true_negative, neg) + "\x1b[0m")
-    print(no + "False Positive : {}/{}".format(false_positive, neg) + "\x1b[0m")
-    print(no + "False Negative : {}/{}".format(false_negative, pos) + "\x1b[0m")
-    print("Precision = ", precision)
-    print("Recall = ", recall)
-    print("F Score = ", f_score)
+    logging.info("Correctly Predicted : {}/{}".format(good, size))
+    logging.info(ok + "True Positive : {}/{}".format(true_positive, pos) + "\x1b[0m")
+    logging.info(ok + "True Negative : {}/{}".format(true_negative, neg) + "\x1b[0m")
+    logging.info(no + "False Positive : {}/{}".format(false_positive, neg) + "\x1b[0m")
+    logging.info(no + "False Negative : {}/{}".format(false_negative, pos) + "\x1b[0m")
+    logging.info("Precision = {}".format(precision))
+    logging.info("Recall = {}".format(recall))
+    logging.info("F Score = {}".format(f_score))
 
 
 def binary_cross_entropy(predict, y_class, lmbd, net):
@@ -798,6 +793,15 @@ def layers_init(hidden_layers, units, n_features, n_class):
 
 def main():
     start = timeit.default_timer()
+    try:
+        level = logging.INFO
+        format = '%(message)s'
+        handlers = [logging.FileHandler('metrics.log'), logging.StreamHandler()]
+    except Exception as e:
+        print("Can't write to metrics.log.")
+        print(e.__doc__)
+        sys.exit(0)
+    logging.basicConfig(level=level, format=format, handlers=handlers)
     df, args = get_data()
     pd.set_option('display.expand_frame_repr', False)
     pd.set_option('display.max_rows', len(df))
@@ -823,9 +827,9 @@ def main():
     for g in gd:
         g.perform()
         g.plot_results()
-    plt.show()
     stop = timeit.default_timer()
-    print('Time Global: ', stop - start)
+    logging.info('Time Global: {} \n\n\n  --------------------  \n\n\n'.format(stop - start))
+    plt.show()
 
 
 if __name__ == '__main__':
