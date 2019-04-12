@@ -94,6 +94,7 @@ def get_data():
     parser.add_argument("-es", "--early_stopping", help="Early Stopping Activation", action="store_true")
     parser.add_argument("-pat", "--patience", help="Number of epochs waited to execute early stopping", type=check_ipositive_null, default=0)
     parser.add_argument("-nb", "--no_batch_too", help="Perform Gradient Descent also without batches (when batch_size is enabled)", action="store_true")
+    parser.add_argument("-bm", "--bonus_metrics", help="Precision, Recall and F Score metrics", action="store_true")
     args = parser.parse_args()
     try:
         data = pd.read_csv(args.data, header=None)
@@ -153,6 +154,7 @@ class network:
         self.deltas = []
         self.predict = []
         self.valid_predict = []
+        self.best_predict = []
         i = 0
         while i < self.size - 1:
             self.thetas.append(theta_init(
@@ -166,6 +168,10 @@ class network:
             self.velocity.append(theta_init(
                 self.layers[i].size, self.layers[i + 1].size, eps=0.0))
             i += 1
+        unique, counts = np.unique(self.y, return_counts=True)
+        self.count_y = dict(zip(unique, counts))
+        unique, counts = np.unique(self.valid_y, return_counts=True)
+        self.count_valid_y = dict(zip(unique, counts))
 
     def split(self, batch_size):
         sections = []
@@ -183,6 +189,7 @@ class network:
             self.early_stop_min = val_costs[index]
             self.early_stop_counter = 0
             self.best_thetas = copy.deepcopy(self.thetas)
+            self.best_predict = copy.deepcopy(self.valid_predict)
             self.early_stop_index = index
             return 0
         elif self.patience > self.early_stop_counter:
@@ -274,6 +281,14 @@ class gradient_descent:
         self.optimization = gradient_descent.optimizations[optimization]
         self.n_batch = None
         self.opt = optimization
+        self.valid_metrics = {'good': []}
+        self.valid_metrics['precision'] = []
+        self.valid_metrics['recall'] = []
+        self.valid_metrics['f_score'] = []
+        self.metrics = {'good': []}
+        self.metrics['precision'] = []
+        self.metrics['recall'] = []
+        self.metrics['f_score'] = []
         if optimization == 'rmsprop' or optimization == 'adagrad':
             self.decay_rate = 0.9
             self.eps = 0.00001
@@ -343,6 +358,7 @@ class gradient_descent:
         stop = timeit.default_timer()
         print('Time Gradient: ', stop - start)
         display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
+        print("epochs = ", self.epochs)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def normal_es_gd(self):
@@ -365,17 +381,17 @@ class gradient_descent:
         if not early_stop:
             prediction(self.net)
             self.add_cost(e)
+            self.net.early_stopping(self.valid_costs, e)
         stop = timeit.default_timer()
         print('Time Gradient: ', stop - start)
-        display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
-        if early_stop:
-            self.epochs = self.net.early_stop_index + 1
+        self.epochs = self.net.early_stop_index
+        display_softmax(np.asarray(self.net.best_predict), self.net.valid_y)
+        print("epochs = ", self.epochs)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def stochastic_es_gd(self):
         self.costs = []
         self.valid_costs = []
-        early_stop = 0
         e = 0
         epochs = self.args.epochs
         start = timeit.default_timer()
@@ -392,7 +408,6 @@ class gradient_descent:
             prediction(self.net)
             self.add_cost(e)
             if self.net.early_stopping(self.valid_costs, e):
-                early_stop = 1
                 break
             if e < epochs-1:
                 self.net.predict.clear()
@@ -401,9 +416,9 @@ class gradient_descent:
         # verif last add cost
         stop = timeit.default_timer()
         print('Time Gradient: ', stop - start)
-        display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
-        if early_stop:
-            self.epochs = self.net.early_stop_index + 1
+        self.epochs = self.net.early_stop_index + 1
+        display_softmax(np.asarray(self.net.best_predict), self.net.valid_y)
+        print("epochs = ", self.epochs)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def add_cost(self, e):
@@ -412,12 +427,66 @@ class gradient_descent:
                 np.asarray(self.net.valid_predict), self.net.valid_vec_y, 0, self.net)
         self.costs.append(new_cost)
         self.valid_costs.append(new_valid_cost)
-        #print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e]))
+        if not self.args.bonus_metrics:
+            print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e]))
+        else:
+            self.add_metrics(np.asarray(self.net.predict), self.net.y)
+            self.add_metrics(np.asarray(self.net.valid_predict), self.net.valid_y, valid=True)
+            print('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f} | correct: {}/{} - val_correct: {}/{} | pre: {:.4f} - val_pre: {:.4f} | recall: {:.4f} - val_recall: {:.4f} | fscore: {:.4f} - val_fscore: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e], self.metrics['good'][e], self.net.train_size, self.valid_metrics['good'][e], self.net.valid_size, self.metrics['precision'][e], self.valid_metrics['precision'][e], self.metrics['recall'][e], self.valid_metrics['recall'][e], self.metrics['f_score'][e], self.valid_metrics['f_score'][e]))
+
+    def add_metrics(self, p, y, valid=False):
+        y_predict = p.argmax(axis=1)
+        i = 0
+        good = 0
+        if not valid:
+            size = self.net.train_size
+        else:
+            size = self.net.valid_size
+        true_positive = 0
+        false_positive = 0
+        true_negative = 0
+        false_negative = 0
+        while i < size:
+            if y[i] == y_predict[i]:
+                if y[i] == 1:
+                    true_positive += 1
+                else:
+                    true_negative += 1
+                good += 1
+            else:
+                if y[i] == 1:
+                    false_negative += 1
+                else:
+                    false_positive += 1
+            i += 1
+        try:
+            precision = float(true_positive/(true_positive + false_positive))
+        except Exception:
+            precision = 0
+        try:
+            recall = float(true_positive/(true_positive + false_negative))
+        except Exception:
+            recall = 0
+        try:
+            f_score = 2 * (precision * recall/(precision + recall))
+        except Exception:
+            f_score = 0
+        if valid:
+            self.valid_metrics['good'].append(good)
+            self.valid_metrics['precision'].append(precision)
+            self.valid_metrics['recall'].append(recall)
+            self.valid_metrics['f_score'].append(f_score)
+        else:
+            self.metrics['good'].append(good)
+            self.metrics['precision'].append(precision)
+            self.metrics['recall'].append(recall)
+            self.metrics['f_score'].append(f_score)
 
     def plot_results(self):
         title = self.opt.upper()
         if self.batch_size:
             title = title + " Batched ({})".format(self.batch_size)
+        plt.figure(1)
         plt.xlabel('No. of epochs')
         plt.ylabel('Cost Function')
         plt.title("Cost Function Evolution")
@@ -428,6 +497,40 @@ class gradient_descent:
                 np.arange(self.epochs+1),
                 self.valid_costs[:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
         plt.legend()
+        if self.args.bonus_metrics:
+            plt.figure(2)
+            plt.xlabel('No. of epochs')
+            plt.ylabel('Precision')
+            plt.title("Precision Evolution")
+            p = plt.plot(
+                    np.arange(self.epochs+1),
+                    self.metrics['precision'][:self.epochs+1], alpha=0.5, label=title + ' Train')
+            plt.plot(
+                    np.arange(self.epochs+1),
+                    self.valid_metrics['precision'][:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
+            plt.legend()
+            plt.figure(3)
+            plt.xlabel('No. of epochs')
+            plt.ylabel('Recall')
+            plt.title("Recall Evolution")
+            p = plt.plot(
+                    np.arange(self.epochs+1),
+                    self.metrics['recall'][:self.epochs+1], alpha=0.5, label=title + ' Train')
+            plt.plot(
+                    np.arange(self.epochs+1),
+                    self.valid_metrics['recall'][:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
+            plt.legend()
+            plt.figure(4)
+            plt.xlabel('No. of epochs')
+            plt.ylabel('F Score')
+            plt.title("F Score Evolution")
+            p = plt.plot(
+                    np.arange(self.epochs+1),
+                    self.metrics['f_score'][:self.epochs+1], alpha=0.5, label=title + ' Train')
+            plt.plot(
+                    np.arange(self.epochs+1),
+                    self.valid_metrics['f_score'][:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
+            plt.legend()
 
 
 def theta_init(layer_1, layer_2, seed=0, eps=0.5):
@@ -546,7 +649,7 @@ def display_softmax(p, y):
                 true_negative += 1
                 neg += 1
             good += 1
-            print(ok + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
+            #print(ok + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         else:
             if y[i] == 1:
                 false_negative += 1
@@ -554,7 +657,7 @@ def display_softmax(p, y):
             else:
                 false_positive += 1
                 neg += 1
-            print(no + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
+            #print(no + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         i += 1
     try:
         precision = float(true_positive/(true_positive + false_positive))
