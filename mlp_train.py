@@ -9,6 +9,8 @@ import copy
 import timeit
 import argparse
 import logging
+import json
+import codecs
 from datetime import datetime
 
 
@@ -129,23 +131,16 @@ class layer:
 
 
 class network:
-    def __init__(self, layers, data_train, data_valid, args):
+    def __init__(self, layers, data_train, data_valid=None, args=None, thetas=None):
         self.layers = layers
         self.size = len(layers)
         self.train_size = len(data_train)
-        self.valid_size = len(data_valid)
         self.x = data_train.drop(columns=['class', 'vec_class']).to_numpy()
         self.batched_x = 0
         self.batched_vec_y = 0
-        self.valid_x = data_valid.drop(columns=['class', 'vec_class']).to_numpy()
         self.y = data_train['class'].to_numpy()
         self.vec_y = np.asarray(data_train['vec_class'].tolist())
-        self.valid_y = data_valid['class'].to_numpy()
-        self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
         self.n_class = len(np.unique(self.y))
-        self.lmbd = args.lmbd
-        self.momentum = args.momentum
-        self.patience = args.patience
         self.early_stop_counter = 0
         self.early_stop_index = 0
         self.early_stop_min = None
@@ -156,23 +151,34 @@ class network:
         self.predict = []
         self.valid_predict = []
         self.best_predict = []
-        i = 0
-        while i < self.size - 1:
-            self.thetas.append(theta_init(
-                self.layers[i].size,
-                self.layers[i + 1].size,
-                self.layers[i].seed))
-            self.best_thetas.append(theta_init(
-                self.layers[i].size, self.layers[i + 1].size, eps=0.0))
-            self.deltas.append(theta_init(
-                self.layers[i].size, self.layers[i + 1].size, eps=0.0))
-            self.velocity.append(theta_init(
-                self.layers[i].size, self.layers[i + 1].size, eps=0.0))
-            i += 1
         unique, counts = np.unique(self.y, return_counts=True)
         self.count_y = dict(zip(unique, counts))
-        unique, counts = np.unique(self.valid_y, return_counts=True)
-        self.count_valid_y = dict(zip(unique, counts))
+        if data_valid is not None:
+            self.valid_size = len(data_valid)
+            self.valid_x = data_valid.drop(columns=['class', 'vec_class']).to_numpy()
+            self.valid_y = data_valid['class'].to_numpy()
+            self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
+            unique, counts = np.unique(self.valid_y, return_counts=True)
+            self.count_valid_y = dict(zip(unique, counts))
+            i = 0
+            while i < self.size - 1:
+                self.thetas.append(theta_init(
+                    self.layers[i].size,
+                    self.layers[i + 1].size,
+                    self.layers[i].seed))
+                self.best_thetas.append(theta_init(
+                    self.layers[i].size, self.layers[i + 1].size, eps=0.0))
+                self.deltas.append(theta_init(
+                    self.layers[i].size, self.layers[i + 1].size, eps=0.0))
+                self.velocity.append(theta_init(
+                    self.layers[i].size, self.layers[i + 1].size, eps=0.0))
+                i += 1
+        else:
+            self.thetas = copy.deepcopy(thetas)
+        if args is not None:
+            self.lmbd = args.lmbd
+            self.momentum = args.momentum
+            self.patience = args.patience
 
     def split(self, batch_size):
         sections = []
@@ -341,6 +347,7 @@ class gradient_descent:
             e += 1
         prediction(self.net)
         self.add_cost(e)
+        self.net.best_thetas = copy.deepcopy(self.net.thetas)
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
         display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
@@ -368,6 +375,7 @@ class gradient_descent:
                 self.net.valid_predict.clear()
             e += 1
         # verif last add cost
+        self.net.best_thetas = copy.deepcopy(self.net.thetas)
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
         display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
@@ -819,7 +827,11 @@ def main():
         dfs[0] = dfs[0][(np.abs((df_tmp.select_dtypes(include='number'))) < args.outliers).all(axis=1)]
     layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
     net = network(layers, dfs[0], dfs[1], args)
+    results = {'stats': stats}
+    results['units'] = args.units
+    results['layers'] = args.layers
     gd = []
+    weights = []
     for opt in args.optimizations:
         gd.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=args.batch_size))
         if args.batch_size and args.no_batch_too:
@@ -827,9 +839,27 @@ def main():
     for g in gd:
         g.perform()
         g.plot_results()
+        weights.append({'type': g.opt, 'thetas': g.net.best_thetas, 'batch_size': g.batch_size})
+    results['weights'] = weights
+    outfile = 'weights.npy'
+    # describe(results)
+    try:
+        np.save(outfile, [results])
+    except Exception as e:
+        print("Can't write to {}.".format(outfile))
+        print(e.__doc__)
+        sys.exit(0)
+    # np.save('1.npy', results)
+    # with open('outputfile', 'w') as fout:
+    #     json.dump(results, fout)
+    # with open('outputfile') as fh:
+    #     a = json.load(fh)
+    # with open(outfile) as a:
+    # for b in a[0]:
+
     stop = timeit.default_timer()
     logging.info('Time Global: {} \n\n\n  --------------------  \n\n\n'.format(stop - start))
-    plt.show()
+    # plt.show()
 
 
 if __name__ == '__main__':
