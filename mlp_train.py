@@ -47,55 +47,133 @@ def describe(arg):
 def check_fpositive(value):
     fvalue = float(value)
     if fvalue <= 0:
-        raise argparse.ArgumentTypeError("%s is an invalid positive value" % value)
+        raise argparse.ArgumentTypeError(
+                "%s is an invalid positive value" % value)
     return fvalue
 
 
 def check_fpositive_null(value):
     fvalue = float(value)
     if fvalue < 0:
-        raise argparse.ArgumentTypeError("%s is an invalid positive or null value" % value)
+        raise argparse.ArgumentTypeError(
+                "%s is an invalid positive or null value" % value)
     return fvalue
 
 
 def check_ipositive(value):
     ivalue = int(value)
     if ivalue <= 0 or ivalue > 1000000:
-        raise argparse.ArgumentTypeError("%s is an invalid positive value" % value)
+        raise argparse.ArgumentTypeError(
+                "%s is an invalid positive value" % value)
     return ivalue
 
 
 def check_ipositive_null(value):
     ivalue = int(value)
     if ivalue < 0 or ivalue > 1000000:
-        raise argparse.ArgumentTypeError("%s is an invalid positive or null value" % value)
+        raise argparse.ArgumentTypeError(
+                "%s is an invalid positive or null value" % value)
     return ivalue
 
 
 def check_outliers(value):
     fvalue = float(value)
     if fvalue < 2.0 or fvalue > 4.0:
-        raise argparse.ArgumentTypeError("%s is an invalid z score (must be 2 < z <= 4)" % value)
+        raise argparse.ArgumentTypeError(
+                "%s is an invalid z score (must be 2 < z <= 4)" % value)
     return fvalue
 
 
 def get_data():
     parser = argparse.ArgumentParser()
-    parser.add_argument("dataset", help="a data set", nargs='?', default="resources/dataset_train.csv")
-    parser.add_argument("-L", "--layers", help="Number of layers", type=check_ipositive, default=2)
-    parser.add_argument("-U", "--units", help="Number of units per layer", type=check_ipositive, default=12)
-    parser.add_argument("-lr", "--learning_rate", help="Learning Rate's value", type=check_fpositive, default=1.0)
-    parser.add_argument("-b", "--batch_size", help="Size of batch", type=check_ipositive, default=0)
-    parser.add_argument("-e", "--epochs", help="Number of epochs", type=check_ipositive, default=80)
-    parser.add_argument("-la", "--lmbd", help="Lambda's value for regularization", type=check_fpositive_null, default=0.0)
-    parser.add_argument("-o", "--outliers", help="Drop outliers with the z score given", type=check_outliers, default=0.0)
-    parser.add_argument('-opt', '--optimizations', nargs='+', help='Optimization list for Gradient descent', choices=['normal', 'adam', 'adagrad', 'nesterov', 'rmsprop'], default=['normal'])
-    parser.add_argument("-shu", "--shuffle", help="Shuffle the data set", action="store_true")
-    parser.add_argument("-mu", "--momentum", help="Momentum 's value fot NAG (Nesterov's Accelerated Momentum)", type=check_fpositive, default=0.01)
-    parser.add_argument("-es", "--early_stopping", help="Early Stopping Activation", action="store_true")
-    parser.add_argument("-pat", "--patience", help="Number of epochs waited to execute early stopping", type=check_ipositive_null, default=0)
-    parser.add_argument("-nb", "--no_batch_too", help="Perform Gradient Descent also without batches (when batch_size is enabled)", action="store_true")
-    parser.add_argument("-bm", "--bonus_metrics", help="Precision, Recall and F Score metrics", action="store_true")
+    parser.add_argument(
+            "dataset",
+            help="a data set",
+            nargs='?',
+            default="resources/dataset_train.csv")
+    parser.add_argument(
+            "-L",
+            "--layers",
+            help="Number of layers",
+            type=check_ipositive,
+            default=2)
+    parser.add_argument(
+            "-U",
+            "--units",
+            help="Number of units per layer",
+            type=check_ipositive,
+            default=12)
+    parser.add_argument(
+            "-lr",
+            "--learning_rate",
+            help="Learning Rate's value",
+            type=check_fpositive,
+            default=1.0)
+    parser.add_argument(
+            "-b",
+            "--batch_size",
+            help="Size of batch",
+            type=check_ipositive,
+            default=0)
+    parser.add_argument(
+            "-e",
+            "--epochs",
+            help="Number of epochs",
+            type=check_ipositive,
+            default=80)
+    parser.add_argument(
+            "-la",
+            "--lmbd",
+            help="Lambda's value for regularization",
+            type=check_fpositive_null,
+            default=0.0)
+    parser.add_argument(
+            "-o",
+            "--outliers",
+            help="Drop outliers with the z score given",
+            type=check_outliers,
+            default=0.0)
+    parser.add_argument(
+            '-opt',
+            '--optimizations',
+            nargs='+',
+            help='Optimization list for Gradient descent',
+            choices=['normal', 'adam', 'adagrad', 'nesterov', 'rmsprop'],
+            default=['normal'])
+    parser.add_argument(
+            "-s",
+            "--shuffle",
+            help="Shuffle the data set",
+            action="store_true")
+    parser.add_argument(
+            "-m",
+            "--momentum",
+            help="Momentum 's value fot NAG (Nesterov's Accelerated Momentum)",
+            type=check_fpositive,
+            default=0.01)
+    parser.add_argument(
+            "-es",
+            "--early_stopping",
+            help="Early Stopping Activation",
+            action="store_true")
+    parser.add_argument(
+            "-p",
+            "--patience",
+            help="Number of epochs waited to execute early stopping",
+            type=check_ipositive_null,
+            default=0)
+    parser.add_argument(
+            "-nb",
+            "--no_batch_too",
+            help=(
+                "Perform Gradient Descent also without batches "
+                "(when batch_size is enabled)"),
+            action="store_true")
+    parser.add_argument(
+            "-bm",
+            "--bonus_metrics",
+            help="Precision, Recall and F Score metrics",
+            action="store_true")
     args = parser.parse_args()
     try:
         data = pd.read_csv(args.dataset, header=None)
@@ -130,7 +208,8 @@ class layer:
 
 
 class network:
-    def __init__(self, layers, data_train, data_valid=None, args=None, thetas=None):
+    def __init__(
+            self, layers, data_train, data_valid=None, args=None, thetas=None):
         self.layers = layers
         self.size = len(layers)
         self.train_size = len(data_train)
@@ -154,7 +233,8 @@ class network:
         self.count_y = dict(zip(unique, counts))
         if data_valid is not None:
             self.valid_size = len(data_valid)
-            self.valid_x = data_valid.drop(columns=['class', 'vec_class']).to_numpy()
+            self.valid_x = data_valid.drop(
+                    columns=['class', 'vec_class']).to_numpy()
             self.valid_y = data_valid['class'].to_numpy()
             self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
             unique, counts = np.unique(self.valid_y, return_counts=True)
@@ -207,13 +287,26 @@ class network:
 
 def display_results(costs, valid_costs, epochs):
     if all(costs[i] >= costs[i+1] for i in range(epochs-1)):
-        logging.info('\x1b[1;32;40m' + 'Train : Cost always decrease.' + '\x1b[0m')
+        logging.info(
+                '\x1b[1;32;40m'
+                + 'Train : Cost always decrease.'
+                + '\x1b[0m')
     else:
-        logging.info('\x1b[1;31;40m' + 'Train : Cost don\'t always decrease (Try smaller Learning Rate ?).' + '\x1b[0m')
+        logging.info(
+                '\x1b[1;31;40m'
+                + 'Train : Cost don\'t always decrease'
+                + ' (Try smaller Learning Rate ?).'
+                + '\x1b[0m')
     if all(valid_costs[i] >= valid_costs[i+1] for i in range(epochs-1)):
-        logging.info('\x1b[1;32;40m' + 'Valid : Cost always decrease.' + '\x1b[0m')
+        logging.info(
+                '\x1b[1;32;40m'
+                + 'Valid : Cost always decrease.'
+                + '\x1b[0m')
     else:
-        logging.info('\x1b[1;31;40m' + 'Valid : Cost don\'t always decrease.' + '\x1b[0m')
+        logging.info(
+                '\x1b[1;31;40m'
+                + 'Valid : Cost don\'t always decrease.'
+                + '\x1b[0m')
     logging.info("train cost = {}".format(costs[epochs]))
     logging.info("valid cost = {}".format(valid_costs[epochs]))
 
@@ -232,15 +325,22 @@ class gradient_descent:
     def normal(self, net, derivate):
         t = 0
         while t < net.size-1:
-            net.thetas[t] = net.thetas[t] - self.args.learning_rate * derivate[t]
+            net.thetas[t] = net.thetas[t] - self.lr * derivate[t]
             t += 1
         return net.thetas
 
     def rmsprop(self, net, derivate):
         t = 0
         while t < net.size - 1:
-            self.cache[t] = self.decay_rate * self.cache[t] + (1 - self.decay_rate) * derivate[t]**2
-            net.thetas[t] = net.thetas[t] - self.args.learning_rate * derivate[t] / (np.sqrt(self.cache[t]) + self.eps)
+            self.cache[t] = (
+                    self.decay_rate
+                    * self.cache[t]
+                    + (1 - self.decay_rate)
+                    * derivate[t]**2)
+            net.thetas[t] = (
+                    net.thetas[t]
+                    - self.lr * derivate[t]
+                    / (np.sqrt(self.cache[t]) + self.eps))
             t += 1
         return net.thetas
 
@@ -248,7 +348,10 @@ class gradient_descent:
         t = 0
         while t < net.size - 1:
             self.cache[t] += derivate[t]**2
-            net.thetas[t] = net.thetas[t] - self.args.learning_rate * derivate[t] / (np.sqrt(self.cache[t]) + self.eps)
+            net.thetas[t] = (
+                    net.thetas[t]
+                    - self.lr * derivate[t]
+                    / (np.sqrt(self.cache[t]) + self.eps))
             t += 1
         return net.thetas
 
@@ -256,8 +359,14 @@ class gradient_descent:
         t = 0
         while t < net.size - 1:
             self.m[t] = self.beta1 * self.m[t] + (1 - self.beta1) * derivate[t]
-            self.v[t] = self.beta2 * self.v[t] + (1 - self.beta2) * (derivate[t]**2)
-            net.thetas[t] = net.thetas[t] - self.args.learning_rate * self.m[t] / (np.sqrt(self.v[t]) + self.eps)
+            self.v[t] = (
+                    self.beta2
+                    * self.v[t]
+                    + (1 - self.beta2) * (derivate[t]**2))
+            net.thetas[t] = (
+                    net.thetas[t]
+                    - self.lr
+                    * self.m[t] / (np.sqrt(self.v[t]) + self.eps))
             t += 1
         return net.thetas
 
@@ -265,8 +374,13 @@ class gradient_descent:
         t = 0
         cache = copy.deepcopy(net.velocity)
         while t < net.size - 1:
-            net.velocity[t] = net.momentum * net.velocity[t] - self.args.learning_rate * derivate[t]
-            net.thetas[t] = net.thetas[t] - net.momentum * cache[t] + ((1 + net.momentum) * net.velocity[t])
+            net.velocity[t] = (
+                    net.momentum * net.velocity[t]
+                    - self.lr * derivate[t])
+            net.thetas[t] = (
+                    net.thetas[t]
+                    - net.momentum * cache[t]
+                    + ((1 + net.momentum) * net.velocity[t]))
             t += 1
         return net.thetas
 
@@ -307,18 +421,38 @@ class gradient_descent:
             self.v = copy.deepcopy(net.deltas)
 
     def perform(self):
+        info = (
+                "\x1b[1;33;40m{} Type: {} | layers: {} | units: {}"
+                " | learning rate : {} | epochs {} | batch size: {}"
+                " | lambda: {} | early stop: {} | patience: {}")
+        rms = " | epsilon {} | decay rate {}"
+        adam = " | epsilon {} | beta 1 {} | beta 2 {}"
+        nes = " | momentum: {}"
+        end_color = "\x1b[0m"
         if self.opt == 'rmsprop' or self.opt == 'adagrad':
-            logging.info("\x1b[1;33;40m{} Type: {} | layers: {} | units: {} | learning rate : {} | epochs {} | batch size: {} | lambda: {} | early stop: {} | patience: {} | epsilon {} | decay rate {}\x1b[0m".format(
-                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt, self.args.layers, self.args.units, self.lr, self.epochs, self.batch_size, self.net.lmbd, self.args.early_stopping, self.args.patience, self.eps, self.decay_rate))
+            logging.info((info + rms + end_color).format(
+                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt,
+                self.args.layers, self.args.units, self.lr, self.epochs,
+                self.batch_size, self.net.lmbd, self.args.early_stopping,
+                self.args.patience, self.eps, self.decay_rate))
         elif self.opt == 'adam':
-            logging.info("\x1b[1;33;40m{} Type: {} | layers: {} | units: {} | learning rate : {} | epochs {} | batch size: {} | lambda: {} | early stop: {} | patience: {} | epsilon {} | beta 1 {} | beta 2 {}\x1b[0m".format(
-                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt, self.args.layers, self.args.units, self.lr, self.epochs, self.batch_size, self.net.lmbd, self.args.early_stopping, self.args.patience, self.eps, self.beta1, self.beta2))
+            logging.info((info + adam + end_color).format(
+                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt,
+                self.args.layers, self.args.units, self.lr, self.epochs,
+                self.batch_size, self.net.lmbd, self.args.early_stopping,
+                self.args.patience, self.eps, self.beta1, self.beta2))
         elif self.opt == 'nesterov':
-            logging.info("\x1b[1;33;40m{} Type: {} | layers: {} | units: {} | learning rate : {} | epochs {} | batch size: {} | lambda: {} | early stop: {} | patience: {} | momentum: {}\x1b[0m".format(
-                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt, self.args.layers, self.args.units, self.lr, self.epochs, self.batch_size, self.net.lmbd, self.args.early_stopping, self.args.patience, self.args.momentum))
+            logging.info((info + nes + end_color).format(
+                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt,
+                self.args.layers, self.args.units, self.lr, self.epochs,
+                self.batch_size, self.net.lmbd, self.args.early_stopping,
+                self.args.patience, self.args.momentum))
         else:
-            logging.info("\x1b[1;33;40m{} Type: {} | layers: {} | units: {} | learning rate : {} | epochs {} | batch size: {} | lambda: {} | early stop: {} | patience: {}\x1b[0m".format(
-                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt, self.args.layers, self.args.units, self.lr, self.epochs, self.batch_size, self.net.lmbd, self.args.early_stopping, self.args.patience))
+            logging.info((info + end_color).format(
+                datetime.today().strftime('%Y-%m-%d %H:%M'), self.opt,
+                self.args.layers, self.args.units, self.lr, self.epochs,
+                self.batch_size, self.net.lmbd, self.args.early_stopping,
+                self.args.patience))
         if self.batch_size:
             self.net.split(self.args.batch_size)
             self.n_batch = len(self.net.batched_x)
@@ -364,7 +498,10 @@ class gradient_descent:
         while e < self.epochs:
             b = 0
             while b < self.n_batch:
-                derivate = backward_pro_sto(self.net, self.net.batched_x[b], self.net.batched_vec_y[b])
+                derivate = backward_pro_sto(
+                        self.net,
+                        self.net.batched_x[b],
+                        self.net.batched_vec_y[b])
                 self.net.thetas = self.optimization(self, self.net, derivate)
                 b += 1
             prediction(self.net)
@@ -419,7 +556,10 @@ class gradient_descent:
         while e < epochs:
             b = 0
             while b < self.n_batch:
-                derivate = backward_pro_sto(self.net, self.net.batched_x[b], self.net.batched_vec_y[b])
+                derivate = backward_pro_sto(
+                        self.net,
+                        self.net.batched_x[b],
+                        self.net.batched_vec_y[b])
                 self.net.thetas = self.optimization(self, self.net, derivate)
                 b += 1
             prediction(self.net)
@@ -437,17 +577,42 @@ class gradient_descent:
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def add_cost(self, e):
-        new_cost = binary_cross_entropy(np.asarray(self.net.predict), self.net.vec_y, self.net.lmbd, self.net)
+        new_cost = binary_cross_entropy(
+                np.asarray(self.net.predict),
+                self.net.vec_y,
+                self.net.lmbd,
+                self.net)
         new_valid_cost = binary_cross_entropy(
-                np.asarray(self.net.valid_predict), self.net.valid_vec_y, 0, self.net)
+                np.asarray(self.net.valid_predict),
+                self.net.valid_vec_y,
+                0,
+                self.net)
         self.costs.append(new_cost)
         self.valid_costs.append(new_valid_cost)
+        metrics = 'epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'
+        bonus_metrics = (
+                ' | correct: {:.4f} % - val_correct: {:.4f} %'
+                ' | pre: {:.4f} - val_pre: {:.4f}'
+                ' | recall: {:.4f} - val_recall: {:.4f}'
+                ' | fscore: {:.4f} - val_fscore: {:.4f}')
         if not self.args.bonus_metrics:
-            logging.info('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e]))
+            logging.info(
+                    metrics.format(
+                        e, self.args.epochs, self.costs[e], self.valid_costs[e]
+                        ))
         else:
             self.add_metrics(np.asarray(self.net.predict), self.net.y)
-            self.add_metrics(np.asarray(self.net.valid_predict), self.net.valid_y, valid=True)
-            logging.info('epochs {}/{} - loss: {:.4f} - val_loss: {:.4f} | correct: {:.4f} % - val_correct: {:.4f} % | pre: {:.4f} - val_pre: {:.4f} | recall: {:.4f} - val_recall: {:.4f} | fscore: {:.4f} - val_fscore: {:.4f}'.format(e, self.args.epochs, self.costs[e], self.valid_costs[e], self.metrics['correct'][e], self.valid_metrics['correct'][e], self.metrics['precision'][e], self.valid_metrics['precision'][e], self.metrics['recall'][e], self.valid_metrics['recall'][e], self.metrics['f_score'][e], self.valid_metrics['f_score'][e]))
+            self.add_metrics(
+                    np.asarray(self.net.valid_predict),
+                    self.net.valid_y,
+                    valid=True)
+            logging.info((metrics + bonus_metrics).format(
+                e, self.args.epochs, self.costs[e], self.valid_costs[e],
+                self.metrics['correct'][e], self.valid_metrics['correct'][e],
+                self.metrics['precision'][e],
+                self.valid_metrics['precision'][e],
+                self.metrics['recall'][e], self.valid_metrics['recall'][e],
+                self.metrics['f_score'][e], self.valid_metrics['f_score'][e]))
 
     def add_metrics(self, p, y, valid=False):
         y_predict = p.argmax(axis=1)
@@ -517,7 +682,9 @@ class gradient_descent:
                         l[:self.epochs+1], alpha=0.5, label=title + ' Train')
                 plt.plot(
                         np.arange(self.epochs+1),
-                        self.valid_metrics[metric][:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
+                        self.valid_metrics[metric][:self.epochs+1], '--',
+                        color=p[0].get_color(),
+                        label=title + ' Validation')
                 plt.legend()
                 i += 1
         plt.figure(i)
@@ -529,7 +696,8 @@ class gradient_descent:
                 self.costs[:self.epochs+1], alpha=0.5, label=title + ' Train')
         plt.plot(
                 np.arange(self.epochs+1),
-                self.valid_costs[:self.epochs+1], '--', color=p[0].get_color(), label=title + ' Validation')
+                self.valid_costs[:self.epochs+1], '--', color=p[0].get_color(),
+                label=title + ' Validation')
         plt.legend()
 
 
@@ -591,7 +759,10 @@ def backward_pro(net):
             derivate[i] = total_delta[i] / net.train_size
         else:
             derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i])
-            derivate[i][:, 0] -= (total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
+            derivate[i][:, 0] -= (
+                    total_delta[i][:, 0]
+                    + net.lmbd
+                    * net.thetas[i][:, 0])
             derivate[i] /= net.train_size
         i += 1
     return derivate
@@ -621,7 +792,8 @@ def backward_pro_sto(net, x, vec_y):
             derivate[i] = total_delta[i] / batch_size
         else:
             derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i])
-            derivate[i][:, 0] -= (total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
+            derivate[i][:, 0] -= (
+                    total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
             derivate[i] /= batch_size
         i += 1
     return derivate
@@ -673,10 +845,14 @@ def display_softmax(p, y):
         f_score = 0
         print(e.__doc__)
     logging.info("Correctly Predicted : {}/{}".format(good, size))
-    logging.info(ok + "True Positive : {}/{}".format(true_positive, pos) + "\x1b[0m")
-    logging.info(ok + "True Negative : {}/{}".format(true_negative, neg) + "\x1b[0m")
-    logging.info(no + "False Positive : {}/{}".format(false_positive, neg) + "\x1b[0m")
-    logging.info(no + "False Negative : {}/{}".format(false_negative, pos) + "\x1b[0m")
+    logging.info(ok + "True Positive : {}/{}".format(
+        true_positive, pos) + "\x1b[0m")
+    logging.info(ok + "True Negative : {}/{}".format(
+        true_negative, neg) + "\x1b[0m")
+    logging.info(no + "False Positive : {}/{}".format(
+        false_positive, neg) + "\x1b[0m")
+    logging.info(no + "False Negative : {}/{}".format(
+        false_negative, pos) + "\x1b[0m")
     logging.info("Precision = {}".format(precision))
     logging.info("Recall = {}".format(recall))
     logging.info("F Score = {}".format(f_score))
@@ -693,9 +869,10 @@ def binary_cross_entropy(predict, y_class, lmbd, net):
             thetas_sum += np.sum(net.thetas[i] ** 2)
             i += 1
         regularization = lmbd / (2 * size) * thetas_sum
-    return ((1 / size)
-            * (-1 * y_class[:, 0].dot((np.log(predict[:, 0])))
-                - (1 - y_class[:, 0]).dot((np.log(1 - predict[:, 0]))))) + regularization
+    return (((1 / size)
+            * (-1 * y_class[:, 0].dot(np.log(predict[:, 0]))
+            - (1 - y_class[:, 0]).dot(np.log(1 - predict[:, 0]))))
+            + regularization)
 
 
 def cross_entropy(predict, y_class, lmbd, net):
@@ -712,7 +889,9 @@ def cross_entropy(predict, y_class, lmbd, net):
         regularization = lmbd / (2 * size) * thetas_sum
     i = 0
     while (i < net.n_class):
-        Y.append(-1 * y_class[:, i].T.dot((np.log(predict[:, i]))) - (1 - y_class[:, i]).T.dot((np.log(1 - predict[:, i]))))
+        Y.append(
+                -1 * y_class[:, i].T.dot(np.log(predict[:, i]))
+                - (1 - y_class[:, i]).T.dot(np.log(1 - predict[:, i])))
         i += 1
     return (1 / size) * (sum(Y)) + regularization
 
@@ -720,7 +899,8 @@ def cross_entropy(predict, y_class, lmbd, net):
 def get_stats(df):
     stats = {
             column: escribe(sub_dict)
-            for column, sub_dict in df.select_dtypes(include='number').to_dict().items()}
+            for column, sub_dict in
+            df.select_dtypes(include='number').to_dict().items()}
     return stats
 
 
@@ -741,30 +921,6 @@ def escribe(data):
             / (count - 1)
             * np.sum(np.power(values - stats['mean'], 2)))
     stats['std'] = np.sqrt(stats['var'])
-    # stats['min'] = values[0]
-    # stats['max'] = values[count - 1]
-    # stats['range'] = stats['max'] - stats['min']
-    # stats['25%'] = percentile(0.25, count, values)
-    # stats['75%'] = percentile(0.75, count, values)
-    # if count % 2 == 0:
-    #     stats['50%'] = (values[int(count / 2 - 1)]
-    #                     + values[int(count / 2)]) / 2
-    # else:
-    #     stats['50%'] = values[int((count + 1) / 2 - 1)]
-    # stats['Q3-Q1 range'] = stats['75%'] - stats['25%']
-    # stats['mad'] = np.sum(np.absolute(values - stats['mean'])) / count
-    # stats['10%'] = percentile(0.1, count, values)
-    # stats['20%'] = percentile(0.2, count, values)
-    # stats['30%'] = percentile(0.3, count, values)
-    # stats['40%'] = percentile(0.4, count, values)
-    # stats['60%'] = percentile(0.6, count, values)
-    # stats['70%'] = percentile(0.7, count, values)
-    # stats['80%'] = percentile(0.8, count, values)
-    # stats['90%'] = percentile(0.9, count, values)
-    # svalues = [
-    #         item for item in clean_data.values()
-    #         if item >= stats['10%'] and item <= stats['90%']]
-    # stats['clmean'] = sum(svalues) / len(svalues)
     return stats
 
 
@@ -798,7 +954,9 @@ def init_logging():
     try:
         level = logging.INFO
         format = '%(message)s'
-        handlers = [logging.FileHandler('metrics.log'), logging.StreamHandler()]
+        handlers = [
+                logging.FileHandler('metrics.log'),
+                logging.StreamHandler()]
     except Exception as e:
         print("Can't write to metrics.log.")
         print(e.__doc__)
@@ -816,16 +974,26 @@ def pre_process(df, stats, args):
     dfs = np.split(df, [int((len(df) * 0.80))], axis=0)
     if args.outliers:
         df_tmp = dfs[0].copy()
-        dfs[0] = dfs[0][(np.abs((df_tmp.select_dtypes(include='number'))) < args.outliers).all(axis=1)]
+        dfs[0] = dfs[0][(
+            np.abs(df_tmp.select_dtypes(include='number')) < args.outliers
+                        ).all(axis=1)]
     return df, dfs
 
 
 def create_models(net, args):
     models = []
     for opt in args.optimizations:
-        models.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=args.batch_size))
+        models.append(gradient_descent(
+            copy.deepcopy(net),
+            args,
+            optimization=opt,
+            batched=args.batch_size))
         if args.batch_size and args.no_batch_too:
-            models.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=0))
+            models.append(gradient_descent(
+                copy.deepcopy(net),
+                args,
+                optimization=opt,
+                batched=0))
     return models
 
 
@@ -834,7 +1002,10 @@ def run_models(models):
     for model in models:
         model.perform()
         model.plot_results()
-        weights.append({'type': model.opt, 'thetas': model.net.best_thetas, 'batch_size': model.batch_size})
+        weights.append({
+            'type': model.opt,
+            'thetas': model.net.best_thetas,
+            'batch_size': model.batch_size})
     return weights
 
 
@@ -856,8 +1027,6 @@ def main():
     start = timeit.default_timer()
     init_logging()
     df, args = get_data()
-    pd.set_option('display.expand_frame_repr', False) # a enlever
-    pd.set_option('display.max_rows', len(df)) # a enlever
     stats = get_stats(df)
     df, dfs = pre_process(df, stats, args)
     layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
@@ -866,7 +1035,10 @@ def main():
     weights = run_models(models)
     create_results(stats, args, weights)
     stop = timeit.default_timer()
-    logging.info('Time Global: {} \n\n\n  --------------------  \n\n\n'.format(stop - start))
+    logging.info(
+            'Time Global: {} \n\n\n  --------------------  \n\n\n'.format(
+                stop - start)
+                )
     # plt.show()
 
 
