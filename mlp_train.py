@@ -9,8 +9,6 @@ import copy
 import timeit
 import argparse
 import logging
-import json
-import codecs
 from datetime import datetime
 
 
@@ -83,7 +81,7 @@ def check_outliers(value):
 
 def get_data():
     parser = argparse.ArgumentParser()
-    parser.add_argument("data", help="a data set", nargs='?', default="data.csv")
+    parser.add_argument("dataset", help="a data set", nargs='?', default="resources/dataset_train.csv")
     parser.add_argument("-L", "--layers", help="Number of layers", type=check_ipositive, default=2)
     parser.add_argument("-U", "--units", help="Number of units per layer", type=check_ipositive, default=12)
     parser.add_argument("-lr", "--learning_rate", help="Learning Rate's value", type=check_fpositive, default=1.0)
@@ -100,9 +98,10 @@ def get_data():
     parser.add_argument("-bm", "--bonus_metrics", help="Precision, Recall and F Score metrics", action="store_true")
     args = parser.parse_args()
     try:
-        data = pd.read_csv(args.data, header=None)
+        data = pd.read_csv(args.dataset, header=None)
+        data = data.drop(columns=[0])
     except Exception as e:
-        print("Can't extract data from {}.".format(args.data))
+        print("Can't extract data from {}.".format(args.dataset))
         print(e.__doc__)
         sys.exit(0)
     return data, args
@@ -374,7 +373,6 @@ class gradient_descent:
                 self.net.predict.clear()
                 self.net.valid_predict.clear()
             e += 1
-        # verif last add cost
         self.net.best_thetas = copy.deepcopy(self.net.thetas)
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
@@ -432,7 +430,6 @@ class gradient_descent:
                 self.net.predict.clear()
                 self.net.valid_predict.clear()
             e += 1
-        # verif last add cost
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
         self.epochs = self.net.early_stop_index
@@ -593,7 +590,7 @@ def backward_pro(net):
         if not net.lmbd:
             derivate[i] = total_delta[i] / net.train_size
         else:
-            derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i]) # can add to the lasts column direct ? init derivate as np array ?
+            derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i])
             derivate[i][:, 0] -= (total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
             derivate[i] /= net.train_size
         i += 1
@@ -623,7 +620,7 @@ def backward_pro_sto(net, x, vec_y):
         if not net.lmbd:
             derivate[i] = total_delta[i] / batch_size
         else:
-            derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i]) # can add to the lasts column direct ? init derivate as np array ?
+            derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i])
             derivate[i][:, 0] -= (total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
             derivate[i] /= batch_size
         i += 1
@@ -652,7 +649,6 @@ def display_softmax(p, y):
                 true_negative += 1
                 neg += 1
             good += 1
-            #print(ok + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         else:
             if y[i] == 1:
                 false_negative += 1
@@ -660,7 +656,6 @@ def display_softmax(p, y):
             else:
                 false_positive += 1
                 neg += 1
-            #print(no + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         i += 1
     try:
         precision = float(true_positive/(true_positive + false_positive))
@@ -799,8 +794,7 @@ def layers_init(hidden_layers, units, n_features, n_class):
     return layers
 
 
-def main():
-    start = timeit.default_timer()
+def init_logging():
     try:
         level = logging.INFO
         format = '%(message)s'
@@ -810,13 +804,11 @@ def main():
         print(e.__doc__)
         sys.exit(0)
     logging.basicConfig(level=level, format=format, handlers=handlers)
-    df, args = get_data()
-    pd.set_option('display.expand_frame_repr', False)
-    pd.set_option('display.max_rows', len(df))
-    df = df.rename(columns={0: "id", 1: "class"})
-    df = df.drop(columns=['id'])
-    stats = get_stats(df)
+
+
+def pre_process(df, stats, args):
     df = feature_scaling(df, stats)
+    df = df.rename(columns={1: "class"})
     df['class'] = df['class'].map({'M': 1, 'B': 0})
     df['vec_class'] = df['class'].map({1: [0, 1], 0: [1, 0]})
     if args.shuffle:
@@ -825,38 +817,54 @@ def main():
     if args.outliers:
         df_tmp = dfs[0].copy()
         dfs[0] = dfs[0][(np.abs((df_tmp.select_dtypes(include='number'))) < args.outliers).all(axis=1)]
-    layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
-    net = network(layers, dfs[0], dfs[1], args)
+    return df, dfs
+
+
+def create_models(net, args):
+    models = []
+    for opt in args.optimizations:
+        models.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=args.batch_size))
+        if args.batch_size and args.no_batch_too:
+            models.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=0))
+    return models
+
+
+def run_models(models):
+    weights = []
+    for model in models:
+        model.perform()
+        model.plot_results()
+        weights.append({'type': model.opt, 'thetas': model.net.best_thetas, 'batch_size': model.batch_size})
+    return weights
+
+
+def create_results(stats, args, weights):
     results = {'stats': stats}
     results['units'] = args.units
     results['layers'] = args.layers
-    gd = []
-    weights = []
-    for opt in args.optimizations:
-        gd.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=args.batch_size))
-        if args.batch_size and args.no_batch_too:
-            gd.append(gradient_descent(copy.deepcopy(net), args, optimization=opt, batched=0))
-    for g in gd:
-        g.perform()
-        g.plot_results()
-        weights.append({'type': g.opt, 'thetas': g.net.best_thetas, 'batch_size': g.batch_size})
     results['weights'] = weights
     outfile = 'weights.npy'
-    # describe(results)
     try:
         np.save(outfile, [results])
     except Exception as e:
         print("Can't write to {}.".format(outfile))
         print(e.__doc__)
         sys.exit(0)
-    # np.save('1.npy', results)
-    # with open('outputfile', 'w') as fout:
-    #     json.dump(results, fout)
-    # with open('outputfile') as fh:
-    #     a = json.load(fh)
-    # with open(outfile) as a:
-    # for b in a[0]:
 
+
+def main():
+    start = timeit.default_timer()
+    init_logging()
+    df, args = get_data()
+    pd.set_option('display.expand_frame_repr', False) # a enlever
+    pd.set_option('display.max_rows', len(df)) # a enlever
+    stats = get_stats(df)
+    df, dfs = pre_process(df, stats, args)
+    layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
+    net = network(layers, dfs[0], dfs[1], args)
+    models = create_models(net, args)
+    weights = run_models(models)
+    create_results(stats, args, weights)
     stop = timeit.default_timer()
     logging.info('Time Global: {} \n\n\n  --------------------  \n\n\n'.format(stop - start))
     # plt.show()
