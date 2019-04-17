@@ -3,15 +3,8 @@ import numpy as np
 import pandas as pd
 import inspect
 import re
-import math
-import matplotlib.pyplot as plt
 import copy
-import timeit
-import argparse
 import logging
-import json
-import codecs
-from datetime import datetime
 
 
 def describe(arg):
@@ -58,6 +51,7 @@ def get_data(args):
         weights_f = args[2]
     try:
         dataset = pd.read_csv(dataset_f, header=None)
+        dataset = dataset.drop(columns=[0])
     except Exception as e:
         print("Can't extract data from {}.".format(dataset_f))
         print(e.__doc__)
@@ -115,7 +109,8 @@ def theta_init(layer_1, layer_2, seed=0, eps=0.5):
 
 
 class network:
-    def __init__(self, layers, data_train, data_valid=None, args=None, thetas=None):
+    def __init__(
+            self, layers, data_train, data_valid=None, args=None, thetas=None):
         self.layers = layers
         self.size = len(layers)
         self.train_size = len(data_train)
@@ -139,7 +134,8 @@ class network:
         self.count_y = dict(zip(unique, counts))
         if data_valid is not None:
             self.valid_size = len(data_valid)
-            self.valid_x = data_valid.drop(columns=['class', 'vec_class']).to_numpy()
+            self.valid_x = data_valid.drop(
+                    columns=['class', 'vec_class']).to_numpy()
             self.valid_y = data_valid['class'].to_numpy()
             self.valid_vec_y = np.asarray(data_valid['vec_class'].tolist())
             unique, counts = np.unique(self.valid_y, return_counts=True)
@@ -231,7 +227,8 @@ def display_softmax(p, y):
                 true_negative += 1
                 neg += 1
             good += 1
-            print(ok + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
+            logging.info(ok + "({},{}) - row[{} {}]".format(
+                y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         else:
             if y[i] == 1:
                 false_negative += 1
@@ -239,7 +236,8 @@ def display_softmax(p, y):
             else:
                 false_positive += 1
                 neg += 1
-            print(no + "({},{}) - row[{} {}]".format(y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
+            logging.info(no + "({},{}) - row[{} {}]".format(
+                y[i], y_predict[i], p[i, 0], p[i, 1]) + "\x1b[0m")
         i += 1
     try:
         precision = float(true_positive/(true_positive + false_positive))
@@ -256,31 +254,65 @@ def display_softmax(p, y):
     except Exception as e:
         f_score = 0
         print(e.__doc__)
-    print("Correctly Predicted : {}/{}".format(good, size))
-    print(ok + "True Positive : {}/{}".format(true_positive, pos) + "\x1b[0m")
-    print(ok + "True Negative : {}/{}".format(true_negative, neg) + "\x1b[0m")
-    print(no + "False Positive : {}/{}".format(false_positive, neg) + "\x1b[0m")
-    print(no + "False Negative : {}/{}".format(false_negative, pos) + "\x1b[0m")
-    print("Precision = {}".format(precision))
-    print("Recall = {}".format(recall))
-    print("F Score = {}".format(f_score))
+    logging.info("Correctly Predicted : {}/{}".format(good, size))
+    logging.info(ok + "True Positive : {}/{}".format(
+        true_positive, pos) + "\x1b[0m")
+    logging.info(ok + "True Negative : {}/{}".format(
+        true_negative, neg) + "\x1b[0m")
+    logging.info(no + "False Positive : {}/{}".format(
+        false_positive, neg) + "\x1b[0m")
+    logging.info(no + "False Negative : {}/{}".format(
+        false_negative, pos) + "\x1b[0m")
+    logging.info("Precision = {}".format(precision))
+    logging.info("Recall = {}".format(recall))
+    logging.info("F Score = {}\n".format(f_score))
 
 
-def main():
-    df, data_train = get_data(sys.argv)
-    pd.set_option('display.expand_frame_repr', False)
-    pd.set_option('display.max_rows', len(df))
-    df = df.rename(columns={0: "id", 1: "class"})
-    df = df.drop(columns=['id'])
-    df = feature_scaling(df, data_train[0]['stats'])
+def pre_process(df, stats):
+    df = feature_scaling(df, stats)
+    df = df.rename(columns={1: "class"})
     df['class'] = df['class'].map({'M': 1, 'B': 0})
     df['vec_class'] = df['class'].map({1: [0, 1], 0: [1, 0]})
-    layers = layers_init(data_train[0]['layers'], data_train[0]['units'], len(df.columns) - 2, 2)
-    for weight in data_train[0]['weights']:
-        print("Prediction with {} gradient ( Batched Size = {} ).".format(weight['type'], weight['batch_size']))
+    return df
+
+
+def run_prediction(df, layers, weights):
+    for weight in weights:
+        logging.info(
+                "\x1b[1;33;40mPrediction with {} gradient "
+                "( Batched Size = {} ).\x1b[0m".format(
+                    weight['type'], weight['batch_size']))
         net = network(layers, df, thetas=weight['thetas'])
         prediction(net)
         display_softmax(np.asarray(net.predict), net.y)
+
+
+def init_logging():
+    logfile = 'predictions.log'
+    try:
+        level = logging.INFO
+        format = '%(message)s'
+        handlers = [
+                logging.FileHandler(logfile),
+                logging.StreamHandler()]
+    except Exception as e:
+        print("Can't write to {}.".format(logfile))
+        print(e.__doc__)
+        sys.exit(0)
+    logging.basicConfig(level=level, format=format, handlers=handlers)
+
+
+def main():
+    init_logging()
+    df, data_train = get_data(sys.argv)
+    pd.set_option('display.expand_frame_repr', False)
+    pd.set_option('display.max_rows', len(df))
+    df = pre_process(df, data_train[0]['stats'])
+    layers = layers_init(
+            data_train[0]['layers'],
+            data_train[0]['units'],
+            len(df.columns) - 2, 2)
+    run_prediction(df, layers, data_train[0]['weights'])
 
 
 if __name__ == '__main__':

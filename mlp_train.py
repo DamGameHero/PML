@@ -951,14 +951,15 @@ def layers_init(hidden_layers, units, n_features, n_class):
 
 
 def init_logging():
+    logfile = 'metrics.log'
     try:
         level = logging.INFO
         format = '%(message)s'
         handlers = [
-                logging.FileHandler('metrics.log'),
+                logging.FileHandler(logfile),
                 logging.StreamHandler()]
     except Exception as e:
-        print("Can't write to metrics.log.")
+        print("Can't write to {}.".format(logfile))
         print(e.__doc__)
         sys.exit(0)
     logging.basicConfig(level=level, format=format, handlers=handlers)
@@ -1039,7 +1040,7 @@ def main():
             'Time Global: {} \n\n\n  --------------------  \n\n\n'.format(
                 stop - start)
                 )
-    # plt.show()
+    plt.show()
 
 
 if __name__ == '__main__':
