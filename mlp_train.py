@@ -483,7 +483,7 @@ class gradient_descent:
         self.net.best_thetas = copy.deepcopy(self.net.thetas)
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
-        display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
+        display_fscore(np.asarray(self.net.valid_predict), self.net.valid_y)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def stochastic_gd(self):
@@ -513,7 +513,7 @@ class gradient_descent:
         self.net.best_thetas = copy.deepcopy(self.net.thetas)
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
-        display_softmax(np.asarray(self.net.valid_predict), self.net.valid_y)
+        display_fscore(np.asarray(self.net.valid_predict), self.net.valid_y)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def normal_es_gd(self):
@@ -540,7 +540,7 @@ class gradient_descent:
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
         self.epochs = self.net.early_stop_index
-        display_softmax(np.asarray(self.net.best_predict), self.net.valid_y)
+        display_fscore(np.asarray(self.net.best_predict), self.net.valid_y)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def stochastic_es_gd(self):
@@ -573,7 +573,7 @@ class gradient_descent:
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
         self.epochs = self.net.early_stop_index
-        display_softmax(np.asarray(self.net.best_predict), self.net.valid_y)
+        display_fscore(np.asarray(self.net.best_predict), self.net.valid_y)
         display_results(self.costs, self.valid_costs, self.epochs)
 
     def add_cost(self, e):
@@ -799,7 +799,7 @@ def backward_pro_sto(net, x, vec_y):
     return derivate
 
 
-def display_softmax(p, y):
+def display_fscore(p, y):
     y_predict = p.argmax(axis=1)
     i = 0
     good = 0

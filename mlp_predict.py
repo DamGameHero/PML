@@ -89,6 +89,14 @@ def softmax(z):
     return np.exp(z) / (np.sum(np.exp(z), axis=0)[:, None])
 
 
+def binary_cross_entropy(predict, y_class):
+    size = np.size(predict, 0)
+    predict = predict.reshape(-1, 2)
+    return ((1 / size)
+            * (-1 * y_class[:, 0].dot(np.log(predict[:, 0]))
+            - (1 - y_class[:, 0]).dot(np.log(1 - predict[:, 0]))))
+
+
 class layer:
     seed_id = 0
     activ_dict = {
@@ -205,7 +213,7 @@ def prediction(net):
         i += 1
 
 
-def display_softmax(p, y):
+def display_results(p, y, vec_y):
     y_predict = p.argmax(axis=1)
     i = 0
     good = 0
@@ -254,6 +262,8 @@ def display_softmax(p, y):
     except Exception as e:
         f_score = 0
         print(e.__doc__)
+    logging.info("loss (binary crossentropy) : {}".format(
+        binary_cross_entropy(p, vec_y)))
     logging.info("Correctly Predicted : {}/{}".format(good, size))
     logging.info(ok + "True Positive : {}/{}".format(
         true_positive, pos) + "\x1b[0m")
@@ -284,7 +294,7 @@ def run_prediction(df, layers, weights):
                     weight['type'], weight['batch_size']))
         net = network(layers, df, thetas=weight['thetas'])
         prediction(net)
-        display_softmax(np.asarray(net.predict), net.y)
+        display_results(np.asarray(net.predict), net.y, net.vec_y)
 
 
 def init_logging():
