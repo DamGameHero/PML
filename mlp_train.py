@@ -505,7 +505,7 @@ class gradient_descent:
                 self.net.thetas = self.optimization(self, self.net, derivate)
                 b += 1
             prediction(self.net)
-            self.add_cost(e)
+            self.add_cost(e+1)
             if e < self.epochs-1:
                 self.net.predict.clear()
                 self.net.valid_predict.clear()
@@ -563,8 +563,8 @@ class gradient_descent:
                 self.net.thetas = self.optimization(self, self.net, derivate)
                 b += 1
             prediction(self.net)
-            self.add_cost(e)
-            if self.net.early_stopping(self.valid_costs, e):
+            self.add_cost(e+1)
+            if self.net.early_stopping(self.valid_costs, e+1):
                 break
             if e < epochs-1:
                 self.net.predict.clear()
@@ -760,8 +760,7 @@ def backward_pro(net):
         else:
             derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i])
             derivate[i][:, 0] -= (
-                    total_delta[i][:, 0]
-                    + net.lmbd
+                    net.lmbd
                     * net.thetas[i][:, 0])
             derivate[i] /= net.train_size
         i += 1
@@ -793,7 +792,7 @@ def backward_pro_sto(net, x, vec_y):
         else:
             derivate[i] = (total_delta[i] + net.lmbd * net.thetas[i])
             derivate[i][:, 0] -= (
-                    total_delta[i][:, 0] + net.lmbd * net.thetas[i][:, 0])
+                    net.lmbd * net.thetas[i][:, 0])
             derivate[i] /= batch_size
         i += 1
     return derivate
