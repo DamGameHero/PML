@@ -1024,16 +1024,31 @@ def create_results(stats, args, weights):
 
 
 def main():
+    # log initialization
     start = timeit.default_timer()
     init_logging()
+
+    # Get data
     df, args = get_data()
+
+    # Basic stats calculation
     stats = get_stats(df)
+
+    # Pre Processing
     df, dfs = pre_process(df, stats, args)
+
+    # Neural Network's initialization
     layers = layers_init(args.layers, args.units, len(df.columns) - 2, 2)
     net = network(layers, dfs[0], dfs[1], args)
     models = create_models(net, args)
+
+    # Train
     weights = run_models(models)
+
+    # Model Backup
     create_results(stats, args, weights)
+    
+    # Results Visualisation
     stop = timeit.default_timer()
     logging.info(
             'Time Global: {} \n\n\n  --------------------  \n\n\n'.format(
