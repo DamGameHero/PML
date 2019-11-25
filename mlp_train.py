@@ -44,6 +44,7 @@ def describe(arg):
         del callerframeinfo
 
 
+# Args Check
 def check_fpositive(value):
     fvalue = float(value)
     if fvalue <= 0:
@@ -84,6 +85,7 @@ def check_outliers(value):
     return fvalue
 
 
+# Get Data by argguments
 def get_data():
     parser = argparse.ArgumentParser()
     parser.add_argument(
