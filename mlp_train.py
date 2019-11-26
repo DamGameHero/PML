@@ -192,7 +192,8 @@ def sigmoid(z):
 
 
 def softmax(z):
-    return np.exp(z) / (np.sum(np.exp(z), axis=0)[:, None])
+    # return np.exp(z) / (np.sum(np.exp(z), axis=0)[:, None])
+    return np.exp(z) / (np.sum(np.exp(z), axis=0))
 
 
 class layer:
@@ -314,12 +315,8 @@ def display_results(costs, valid_costs, epochs):
 
 
 def prediction(net):
-    i = 0
-    while i < net.train_size:
-        if i < net.valid_size:
-            forward_pro(net, net.valid_x[i], train=False)
-        forward_pro(net, net.x[i])
-        i += 1
+    bforward_pro(net, train=False)
+    bforward_pro(net)
 
 
 class gradient_descent:
@@ -476,8 +473,8 @@ class gradient_descent:
         while e < self.epochs:
             derivate = backward_pro(self.net)
             self.add_cost(e)
-            self.net.predict.clear()
-            self.net.valid_predict.clear()
+            # self.net.predict.clear()
+            # self.net.valid_predict.clear()
             self.net.thetas = self.optimization(self, self.net, derivate)
             e += 1
         prediction(self.net)
@@ -724,6 +721,27 @@ def forward_pro(net, row, train=True):
     return a
 
 
+def bforward_pro(net, train=True):
+    if train:
+        a = [net.x.T]
+        size = net.train_size
+    else:
+        a = [net.valid_x.T]
+        size = net.valid_size
+    i = 0
+    b = np.ones((1, size))
+    while i < net.size - 1:
+        a[i] = np.concatenate((b, a[i]), axis=0)
+        a.append(net.layers[i+1].activation(
+            net.thetas[i].dot(a[i])))
+        i += 1
+    if train:
+        net.predict = a[i]
+    else:
+        net.valid_predict = a[i]
+    return a
+
+
 def forward_pro_sto(net, row):
     i = 0
     a = [row.reshape(-1, 1)]
@@ -741,20 +759,18 @@ def backward_pro(net):
     delta = [0] * (net.size)
     total_delta = copy.deepcopy(net.deltas)
     derivate = [0] * (net.size - 1)
-    while i < net.train_size:
-        if i < net.valid_size:
-            forward_pro(net, net.valid_x[i], train=False)
-        a = forward_pro(net, net.x[i])
-        j = net.size - 1
-        delta[j] = a[j] - net.vec_y[i].reshape(-1, 1)
+ 
+    bforward_pro(net, train=False)
+    a = bforward_pro(net)
+    j = net.size - 1
+    delta[j] = a[j] - net.vec_y.T
+    j -= 1
+    while j > 0:
+        delta[j] = net.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
+        total_delta[j] = delta[j + 1].dot(a[j].T)
+        delta[j] = delta[j][1:, :]
         j -= 1
-        while j > 0:
-            delta[j] = net.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
-            total_delta[j] += delta[j + 1] * a[j].T
-            delta[j] = delta[j][1:, :]
-            j -= 1
-        total_delta[j] += delta[j + 1] * a[j].T
-        i += 1
+    total_delta[j] = delta[j + 1].dot(a[j].T)
     i = 0
     while i < net.size - 1:
         if not net.lmbd:
@@ -801,7 +817,7 @@ def backward_pro_sto(net, x, vec_y):
 
 
 def display_fscore(p, y):
-    y_predict = p.argmax(axis=1)
+    y_predict = p.argmax(axis=0)
     i = 0
     good = 0
     size = len(y)
@@ -860,8 +876,8 @@ def display_fscore(p, y):
 
 
 def binary_cross_entropy(predict, y_class, lmbd, net):
-    size = np.size(predict, 0)
-    predict = predict.reshape(-1, 2)
+    size = np.size(predict, 1)
+    predict = predict.T
     regularization = 0
     if lmbd:
         i = 0
