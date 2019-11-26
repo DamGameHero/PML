@@ -757,7 +757,7 @@ def forward_pro_sto(net, row):
 def backward_pro(net):
     i = 0
     delta = [0] * (net.size)
-    total_delta = copy.deepcopy(net.deltas)
+    total_delta = copy.deepcopy(net.deltas) # useless ?
     derivate = [0] * (net.size - 1)
  
     bforward_pro(net, train=False)
