@@ -473,8 +473,6 @@ class gradient_descent:
         while e < self.epochs:
             derivate = backward_pro(self.net)
             self.add_cost(e)
-            # self.net.predict.clear()
-            # self.net.valid_predict.clear()
             self.net.thetas = self.optimization(self, self.net, derivate)
             e += 1
         prediction(self.net)
@@ -492,8 +490,6 @@ class gradient_descent:
         start = timeit.default_timer()
         prediction(self.net)
         self.add_cost(e)
-        self.net.predict.clear()
-        self.net.valid_predict.clear()
         while e < self.epochs:
             b = 0
             while b < self.n_batch:
@@ -505,9 +501,6 @@ class gradient_descent:
                 b += 1
             prediction(self.net)
             self.add_cost(e+1)
-            if e < self.epochs-1:
-                self.net.predict.clear()
-                self.net.valid_predict.clear()
             e += 1
         self.net.best_thetas = copy.deepcopy(self.net.thetas)
         stop = timeit.default_timer()
@@ -528,8 +521,6 @@ class gradient_descent:
             if self.net.early_stopping(self.valid_costs, e):
                 early_stop = 1
                 break
-            self.net.predict.clear()
-            self.net.valid_predict.clear()
             self.net.thetas = self.optimization(self, self.net, derivate)
             e += 1
         if not early_stop:
@@ -550,8 +541,6 @@ class gradient_descent:
         start = timeit.default_timer()
         prediction(self.net)
         self.add_cost(e)
-        self.net.predict.clear()
-        self.net.valid_predict.clear()
         while e < epochs:
             b = 0
             while b < self.n_batch:
@@ -565,9 +554,6 @@ class gradient_descent:
             self.add_cost(e+1)
             if self.net.early_stopping(self.valid_costs, e+1):
                 break
-            if e < epochs-1:
-                self.net.predict.clear()
-                self.net.valid_predict.clear()
             e += 1
         stop = timeit.default_timer()
         logging.info('Time Gradient: {}'.format(stop - start))
@@ -614,7 +600,7 @@ class gradient_descent:
                 self.metrics['f_score'][e], self.valid_metrics['f_score'][e]))
 
     def add_metrics(self, p, y, valid=False):
-        y_predict = p.argmax(axis=1)
+        y_predict = p.argmax(axis=0)
         i = 0
         good = 0
         if not valid:
@@ -742,24 +728,11 @@ def bforward_pro(net, train=True):
     return a
 
 
-def forward_pro_sto(net, row):
-    i = 0
-    a = [row.reshape(-1, 1)]
-    b = np.array([[1.0]]).reshape(1, 1)
-    while i < net.size - 1:
-        a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(net.layers[i+1].activation(
-            net.thetas[i].dot(a[i])))
-        i += 1
-    return a
-
-
 def backward_pro(net):
     i = 0
     delta = [0] * (net.size)
     total_delta = copy.deepcopy(net.deltas) # useless ?
     derivate = [0] * (net.size - 1)
- 
     bforward_pro(net, train=False)
     a = bforward_pro(net)
     j = net.size - 1
@@ -785,24 +758,46 @@ def backward_pro(net):
     return derivate
 
 
+def forward_pro_sto(net, row):
+    i = 0
+    a = [row.reshape(-1, 1)]
+    b = np.array([[1.0]]).reshape(1, 1)
+    while i < net.size - 1:
+        a[i] = np.concatenate((b, a[i]), axis=0)
+        a.append(net.layers[i+1].activation(
+            net.thetas[i].dot(a[i])))
+        i += 1
+    return a
+
+
+def bforward_pro_sto(net, X, size):
+    i = 0
+    a = [X.T]
+    b = np.ones((1, size))
+    while i < net.size - 1:
+        a[i] = np.concatenate((b, a[i]), axis=0)
+        a.append(net.layers[i+1].activation(
+            net.thetas[i].dot(a[i])))
+        i += 1
+    return a
+
+
 def backward_pro_sto(net, x, vec_y):
     i = 0
     delta = [0] * (net.size)
-    total_delta = copy.deepcopy(net.deltas)
+    total_delta = copy.deepcopy(net.deltas) # useless ?
     derivate = [0] * (net.size - 1)
     batch_size = len(x)
-    while i < batch_size:
-        a = forward_pro_sto(net, x[i])
-        j = net.size - 1
-        delta[j] = a[j] - vec_y[i].reshape(-1, 1)
+    a = bforward_pro_sto(net, x, batch_size)
+    j = net.size - 1
+    delta[j] = a[j] - vec_y.T
+    j -= 1
+    while j > 0:
+        delta[j] = net.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
+        total_delta[j] = delta[j + 1].dot(a[j].T)
+        delta[j] = delta[j][1:, :]
         j -= 1
-        while j > 0:
-            delta[j] = net.thetas[j].T.dot(delta[j + 1]) * a[j] * (1 - a[j])
-            total_delta[j] += delta[j + 1] * a[j].T
-            delta[j] = delta[j][1:, :]
-            j -= 1
-        total_delta[j] += delta[j + 1] * a[j].T
-        i += 1
+    total_delta[j] = delta[j + 1].dot(a[j].T)
     i = 0
     while i < net.size - 1:
         if not net.lmbd:
