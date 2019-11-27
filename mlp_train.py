@@ -315,8 +315,8 @@ def display_results(costs, valid_costs, epochs):
 
 
 def prediction(net):
-    bforward_pro(net, train=False)
-    bforward_pro(net)
+    forward_pro(net, train=False)
+    forward_pro(net)
 
 
 class gradient_descent:
@@ -691,23 +691,7 @@ def theta_init(layer_1, layer_2, seed=0, eps=0.5):
     return np.random.rand(layer_2, layer_1 + 1) * 2 * eps - eps
 
 
-def forward_pro(net, row, train=True):
-    i = 0
-    a = [row.reshape(-1, 1)]
-    b = np.array([[1.0]]).reshape(1, 1)
-    while i < net.size - 1:
-        a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(net.layers[i+1].activation(
-            net.thetas[i].dot(a[i])))
-        i += 1
-    if train:
-        net.predict.append(a[i])
-    else:
-        net.valid_predict.append(a[i])
-    return a
-
-
-def bforward_pro(net, train=True):
+def forward_pro(net, train=True):
     if train:
         a = [net.x.T]
         size = net.train_size
@@ -733,8 +717,8 @@ def backward_pro(net):
     delta = [0] * (net.size)
     total_delta = copy.deepcopy(net.deltas) # useless ?
     derivate = [0] * (net.size - 1)
-    bforward_pro(net, train=False)
-    a = bforward_pro(net)
+    forward_pro(net, train=False)
+    a = forward_pro(net)
     j = net.size - 1
     delta[j] = a[j] - net.vec_y.T
     j -= 1
@@ -758,19 +742,7 @@ def backward_pro(net):
     return derivate
 
 
-def forward_pro_sto(net, row):
-    i = 0
-    a = [row.reshape(-1, 1)]
-    b = np.array([[1.0]]).reshape(1, 1)
-    while i < net.size - 1:
-        a[i] = np.concatenate((b, a[i]), axis=0)
-        a.append(net.layers[i+1].activation(
-            net.thetas[i].dot(a[i])))
-        i += 1
-    return a
-
-
-def bforward_pro_sto(net, X, size):
+def forward_pro_sto(net, X, size):
     i = 0
     a = [X.T]
     b = np.ones((1, size))
@@ -788,7 +760,7 @@ def backward_pro_sto(net, x, vec_y):
     total_delta = copy.deepcopy(net.deltas) # useless ?
     derivate = [0] * (net.size - 1)
     batch_size = len(x)
-    a = bforward_pro_sto(net, x, batch_size)
+    a = forward_pro_sto(net, x, batch_size)
     j = net.size - 1
     delta[j] = a[j] - vec_y.T
     j -= 1
@@ -1060,7 +1032,7 @@ def main():
 
     # Model Backup
     create_results(stats, args, weights)
-    
+
     # Results Visualisation
     stop = timeit.default_timer()
     logging.info(
