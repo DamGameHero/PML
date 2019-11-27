@@ -57,7 +57,7 @@ def get_data(args):
         print(e.__doc__)
         sys.exit(0)
     try:
-        data_train = np.load(weights_f)
+        data_train = np.load(weights_f, allow_pickle=True)
     except Exception as e:
         print("Can't extract data from {}.".format(weights_f))
         print(e.__doc__)

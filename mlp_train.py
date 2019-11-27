@@ -691,108 +691,6 @@ def theta_init(layer_1, layer_2, seed=0, eps=0.5):
     return np.random.rand(layer_2, layer_1 + 1) * 2 * eps - eps
 
 
-def forward_propagation(net, train=True):
-    # Initialization
-    i = 0
-    layers = net.layers
-    if train:
-        layers[0].value = net.x.T
-        size = net.train_size
-    else:
-        layers[0].value = net.valid_x.T
-        size = net.valid_size
-    bias = np.ones((1, size))
-
-    # Processing Forward Propagation
-    while i < net.size - 1:
-        layers[i].value = np.concatenate((bias, layers[i].value), axis=0)
-        layers[i+1].value = layers[i+1].activation(
-            net.thetas[i].dot(layers[i].value))
-        i += 1
-
-    # Saving Predictions
-    if train:
-        net.predict = layers[net.size-1].value
-    else:
-        net.valid_predict = layers[net.size-1].value
-    return layers
-
-
-def backward_propagation(net):
-    # Forward Propagation
-    forward_propagation(net, train=False)
-    layers = forward_propagation(net)
-
-    # Initialization
-    delta = [0] * (net.size)
-    error = [0] * (net.size)
-    i = net.size - 1
-
-    # Processing Backward Propagation
-    delta[i] = layers[i].value - net.vec_y.T
-    i -= 1
-    while i > 0:
-        error[i] = delta[i + 1].dot(layers[i].value.T)
-        delta[i] = net.thetas[i].T.dot(delta[i + 1]) * layers[i].value * (1 - layers[i].value)
-        delta[i] = delta[i][1:, :]  # delete the bias
-        i -= 1
-    error[i] = delta[i + 1].dot(layers[i].value.T)
-    return derivative_calc(net, error, net.train_size)
-
-
-def forward_batched_propagation(net, X, size):
-    # Initialization
-    i = 0
-    layers = net.layers
-    layers[0].value = X.T
-    bias = np.ones((1, size))
-
-    # Processing Batched Forward Propagation
-    while i < net.size - 1:
-        layers[i].value = np.concatenate((bias, layers[i].value), axis=0)
-        layers[i+1].value = layers[i+1].activation(
-            net.thetas[i].dot(layers[i].value))
-        i += 1
-    return layers
-
-
-def backward_batched_propagation(net, x, vec_y):
-    # Batched Forward Propagation
-    batch_size = len(x)
-    layers = forward_batched_propagation(net, x, batch_size)
-
-    # Initialization
-    delta = [0] * (net.size)
-    error = [0] * (net.size)
-    i = net.size - 1
-
-    # Processing Batched Backward Propagation
-    delta[i] = layers[i].value - vec_y.T
-    i -= 1
-    while i > 0:
-        error[i] = delta[i + 1].dot(layers[i].value.T)
-        delta[i] = net.thetas[i].T.dot(delta[i + 1]) * layers[i].value * (1 - layers[i].value)
-        delta[i] = delta[i][1:, :]  # delete the bias
-        i -= 1
-    error[i] = delta[i + 1].dot(layers[i].value.T)
-    return derivative_calc(net, error, batch_size)
-
-
-def derivative_calc(net, error, size):
-    derivative = [0] * (net.size - 1)
-    i = 0
-    while i < net.size - 1:
-        if not net.lmbd:
-            derivative[i] = error[i] / size
-        else:
-            derivative[i] = (error[i] + net.lmbd * net.thetas[i])
-            derivative[i][:, 0] -= (
-                    net.lmbd * net.thetas[i][:, 0])
-            derivative[i] /= size
-        i += 1
-    return derivative
-
-
 def display_fscore(p, y):
     y_predict = p.argmax(axis=0)
     i = 0
@@ -1016,6 +914,108 @@ def create_results(stats, args, weights):
         print("Can't write to {}.".format(outfile))
         print(e.__doc__)
         sys.exit(0)
+
+
+def derivative_calc(net, error, size):
+    derivative = [0] * (net.size - 1)
+    i = 0
+    while i < net.size - 1:
+        if not net.lmbd:
+            derivative[i] = error[i] / size
+        else:
+            derivative[i] = (error[i] + net.lmbd * net.thetas[i])
+            derivative[i][:, 0] -= (
+                    net.lmbd * net.thetas[i][:, 0])
+            derivative[i] /= size
+        i += 1
+    return derivative
+
+
+def forward_propagation(net, train=True):
+    # Initialization
+    i = 0
+    layers = net.layers
+    if train:
+        layers[0].value = net.x.T
+        size = net.train_size
+    else:
+        layers[0].value = net.valid_x.T
+        size = net.valid_size
+    bias = np.ones((1, size))
+
+    # Processing Forward Propagation
+    while i < net.size - 1:
+        layers[i].value = np.concatenate((bias, layers[i].value), axis=0)
+        layers[i+1].value = layers[i+1].activation(
+            net.thetas[i].dot(layers[i].value))
+        i += 1
+
+    # Saving Predictions
+    if train:
+        net.predict = layers[net.size-1].value
+    else:
+        net.valid_predict = layers[net.size-1].value
+    return layers
+
+
+def backward_propagation(net):
+    # Forward Propagation
+    forward_propagation(net, train=False)
+    layers = forward_propagation(net)
+
+    # Initialization
+    delta = [0] * (net.size)
+    error = [0] * (net.size)
+    i = net.size - 1
+
+    # Processing Backward Propagation
+    delta[i] = layers[i].value - net.vec_y.T
+    i -= 1
+    while i > 0:
+        error[i] = delta[i + 1].dot(layers[i].value.T)
+        delta[i] = net.thetas[i].T.dot(delta[i + 1]) * layers[i].value * (1 - layers[i].value)
+        delta[i] = delta[i][1:, :]  # delete the bias
+        i -= 1
+    error[i] = delta[i + 1].dot(layers[i].value.T)
+    return derivative_calc(net, error, net.train_size)
+
+
+def forward_batched_propagation(net, X, size):
+    # Initialization
+    i = 0
+    layers = net.layers
+    layers[0].value = X.T
+    bias = np.ones((1, size))
+
+    # Processing Batched Forward Propagation
+    while i < net.size - 1:
+        layers[i].value = np.concatenate((bias, layers[i].value), axis=0)
+        layers[i+1].value = layers[i+1].activation(
+            net.thetas[i].dot(layers[i].value))
+        i += 1
+    return layers
+
+
+def backward_batched_propagation(net, x, vec_y):
+    # Batched Forward Propagation
+    batch_size = len(x)
+    layers = forward_batched_propagation(net, x, batch_size)
+
+    # Initialization
+    delta = [0] * (net.size)
+    error = [0] * (net.size)
+    i = net.size - 1
+
+    # Processing Batched Backward Propagation
+    delta[i] = layers[i].value - vec_y.T
+    i -= 1
+    while i > 0:
+        error[i] = delta[i + 1].dot(layers[i].value.T)
+        delta[i] = net.thetas[i].T.dot(delta[i + 1]) * layers[i].value * (1 - layers[i].value)
+        delta[i] = delta[i][1:, :]  # delete the bias
+        i -= 1
+    error[i] = delta[i + 1].dot(layers[i].value.T)
+    return derivative_calc(net, error, batch_size)
 
 
 def main():
